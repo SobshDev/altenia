@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, Input } from '@/shared/components';
+import { Button, Input, PasswordInput, PasswordStrength, ErrorAlert } from '@/shared/components';
 import { useAuthStore } from '@/stores/authStore';
 import { useDeviceFingerprint } from '@/shared/hooks/useDeviceFingerprint';
 import { registerSchema, type RegisterFormValues } from '../schemas/authSchemas';
@@ -75,16 +75,25 @@ function RegisterHeroContent() {
 function RegisterForm() {
   const fingerprint = useDeviceFingerprint();
   const { register: registerUser, isLoading, error, clearError } = useAuthStore();
+  const [passwordValue, setPasswordValue] = useState('');
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
   });
 
   const navigate = useNavigate();
+
+  // Watch password field for strength indicator
+  const watchedPassword = watch('password', '');
+  useEffect(() => {
+    setPasswordValue(watchedPassword || '');
+  }, [watchedPassword]);
 
   const onSubmit = async (data: RegisterFormValues) => {
     try {
@@ -95,52 +104,47 @@ function RegisterForm() {
     }
   };
 
+  // Get the register props and add focus handlers
+  const passwordRegister = register('password');
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-      {error && (
-        <div
-          className="p-4 bg-destructive-muted border border-destructive-border rounded-xl flex items-start gap-3"
-          role="alert"
-        >
-          <svg className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-          </svg>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-destructive-muted-foreground">{error}</p>
-            <button
-              type="button"
-              onClick={clearError}
-              className="text-xs text-destructive hover:underline mt-1"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
+      {error && <ErrorAlert message={error} onDismiss={clearError} />}
 
       <Input
         label="Email address"
         type="email"
         autoComplete="email"
-        placeholder="you@example.com"
+        placeholder="name@company.com"
         error={errors.email?.message}
         {...register('email')}
       />
 
-      <Input
-        label="Password"
-        type="password"
-        autoComplete="new-password"
-        placeholder="Create a strong password"
-        error={errors.password?.message}
-        {...register('password')}
-      />
+      <div>
+        <PasswordInput
+          label="Password"
+          autoComplete="new-password"
+          placeholder="Create a password"
+          error={errors.password?.message}
+          {...passwordRegister}
+          onFocus={() => {
+            setIsPasswordFocused(true);
+          }}
+          onBlur={(e) => {
+            setIsPasswordFocused(false);
+            passwordRegister.onBlur(e);
+          }}
+        />
+        <PasswordStrength
+          password={passwordValue}
+          show={isPasswordFocused && passwordValue.length > 0}
+        />
+      </div>
 
-      <Input
+      <PasswordInput
         label="Confirm password"
-        type="password"
         autoComplete="new-password"
-        placeholder="Confirm your password"
+        placeholder="Re-enter your password"
         error={errors.confirmPassword?.message}
         {...register('confirmPassword')}
       />
