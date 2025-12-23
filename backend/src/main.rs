@@ -18,6 +18,10 @@ use crate::modules::auth::{
         PostgresRefreshTokenRepository, PostgresUserRepository, UuidGenerator, auth_routes,
     },
 };
+use crate::modules::organizations::{
+    application::services::OrgService,
+    infrastructure::{org_routes, PostgresOrganizationMemberRepository, PostgresOrganizationRepository},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,6 +49,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create infrastructure services
     let user_repo = Arc::new(PostgresUserRepository::new(pool.clone()));
     let token_repo = Arc::new(PostgresRefreshTokenRepository::new(pool.clone()));
+    let org_repo = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
+    let member_repo = Arc::new(PostgresOrganizationMemberRepository::new(pool.clone()));
     let password_hasher = Arc::new(Argon2PasswordHasher::new());
     let jwt_config = JwtConfig::new(
         config.jwt_access_secret.clone(),
@@ -76,11 +82,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Token cleanup task started (runs every hour)");
     }
 
-    // Create auth service
+    // Create auth service (with org repos for personal org creation on register)
     let auth_service = Arc::new(AuthService::new(
-        user_repo,
+        user_repo.clone(),
         token_repo,
         password_hasher,
+        token_service.clone(),
+        id_generator.clone(),
+        org_repo.clone(),
+        member_repo.clone(),
+    ));
+
+    // Create organization service
+    let org_service = Arc::new(OrgService::new(
+        org_repo,
+        member_repo,
+        user_repo,
         token_service.clone(),
         id_generator,
     ));
@@ -103,7 +120,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create router
     let app = Router::new()
-        .nest("/api/auth", auth_routes(auth_service, token_service, rate_limiter))
+        .nest("/api/auth", auth_routes(auth_service, token_service.clone(), rate_limiter))
+        .nest("/api", org_routes(org_service, token_service))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

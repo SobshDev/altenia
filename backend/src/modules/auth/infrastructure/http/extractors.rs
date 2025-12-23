@@ -8,6 +8,8 @@ use crate::modules::auth::application::TokenService;
 pub struct AuthClaims {
     pub user_id: String,
     pub email: String,
+    pub org_id: Option<String>,
+    pub org_role: Option<String>,
 }
 
 /// Application state containing token service

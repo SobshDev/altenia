@@ -37,6 +37,8 @@ pub async fn auth_middleware<TS: TokenService + 'static>(
     req.extensions_mut().insert(AuthClaims {
         user_id: claims.user_id,
         email: claims.email,
+        org_id: claims.org_id,
+        org_role: claims.org_role,
     });
 
     Ok(next.run(req).await)

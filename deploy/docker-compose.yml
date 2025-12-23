@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: altenia-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-altenia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-altenia_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-altenia}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-altenia} -d ${POSTGRES_DB:-altenia}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - altenia-network
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: altenia-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-altenia}:${POSTGRES_PASSWORD:-altenia_dev_password}@postgres:5432/${POSTGRES_DB:-altenia}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production-32chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production-32chars}
+      REFRESH_TOKEN_DURATION_DAYS: ${REFRESH_TOKEN_DURATION_DAYS:-7}
+      HOST: 0.0.0.0
+      PORT: 3000
+      RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - altenia-network
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: altenia-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - backend
+    networks:
+      - altenia-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  altenia-network:
+    driver: bridge

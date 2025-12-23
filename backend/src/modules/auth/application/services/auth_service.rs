@@ -1,41 +1,52 @@
 use std::sync::Arc;
 
 use chrono::{Duration, Utc};
+use rand::Rng;
 
 use crate::modules::auth::application::dto::{
     AuthResponse, LoginCommand, LogoutCommand, RefreshTokenCommand, RegisterUserCommand,
 };
-use crate::modules::auth::application::ports::{IdGenerator, TokenService};
+use crate::modules::auth::application::ports::{IdGenerator, OrgContext, TokenService};
 use crate::modules::auth::domain::{
     AuthDomainError, Email, PasswordHash, PasswordHasher, PlainPassword, RefreshToken,
     RefreshTokenRepository, TokenId, User, UserId, UserRepository,
 };
+use crate::modules::organizations::domain::{
+    MemberId, OrgId, OrgName, OrgRole, OrgSlug, Organization, OrganizationMember,
+    OrganizationMemberRepository, OrganizationRepository,
+};
 
 /// Authentication service - orchestrates all auth use cases
-pub struct AuthService<U, T, P, TS, ID>
+pub struct AuthService<U, T, P, TS, ID, OR, MR>
 where
     U: UserRepository,
     T: RefreshTokenRepository,
     P: PasswordHasher,
     TS: TokenService,
     ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
 {
     user_repo: Arc<U>,
     token_repo: Arc<T>,
     password_hasher: Arc<P>,
     token_service: Arc<TS>,
     id_generator: Arc<ID>,
+    org_repo: Arc<OR>,
+    member_repo: Arc<MR>,
     /// Pre-computed dummy hash for timing attack mitigation
     dummy_password_hash: PasswordHash,
 }
 
-impl<U, T, P, TS, ID> AuthService<U, T, P, TS, ID>
+impl<U, T, P, TS, ID, OR, MR> AuthService<U, T, P, TS, ID, OR, MR>
 where
     U: UserRepository,
     T: RefreshTokenRepository,
     P: PasswordHasher,
     TS: TokenService,
     ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
 {
     pub fn new(
         user_repo: Arc<U>,
@@ -43,6 +54,8 @@ where
         password_hasher: Arc<P>,
         token_service: Arc<TS>,
         id_generator: Arc<ID>,
+        org_repo: Arc<OR>,
+        member_repo: Arc<MR>,
     ) -> Self {
         // Pre-computed Argon2 hash for timing attack mitigation
         // This ensures login takes consistent time whether user exists or not
@@ -56,8 +69,108 @@ where
             password_hasher,
             token_service,
             id_generator,
+            org_repo,
+            member_repo,
             dummy_password_hash,
         }
+    }
+
+    /// Generate a random 4-character suffix for slugs
+    fn generate_random_suffix(&self) -> String {
+        const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let mut rng = rand::rng();
+        (0..4)
+            .map(|_| {
+                let idx = rng.random_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect()
+    }
+
+    /// Create a personal organization for a new user
+    async fn create_personal_org_for_user(
+        &self,
+        user_id: &UserId,
+        email: &str,
+    ) -> Result<(OrgId, OrgRole), AuthDomainError> {
+        // Extract name from email prefix
+        let email_prefix = email.split('@').next().unwrap_or("user");
+        let name = OrgName::new(email_prefix.to_string())
+            .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+
+        // Generate slug with random suffix
+        let suffix = self.generate_random_suffix();
+        let slug = OrgSlug::generate(&name, &suffix);
+
+        // Create personal organization
+        let org_id = OrgId::new(self.id_generator.generate());
+        let org = Organization::new_personal(org_id.clone(), name, slug);
+
+        // Save organization
+        self.org_repo
+            .save(&org)
+            .await
+            .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+
+        // Create membership as owner with last_accessed set
+        let member_id = MemberId::new(self.id_generator.generate());
+        let mut member = OrganizationMember::new(
+            member_id,
+            org_id.clone(),
+            user_id.clone(),
+            OrgRole::Owner,
+        );
+        member.touch_last_accessed();
+        self.member_repo
+            .save(&member)
+            .await
+            .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+
+        Ok((org_id, OrgRole::Owner))
+    }
+
+    /// Get the default organization for a user (last accessed or personal)
+    async fn get_default_org_for_user(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Option<(OrgId, OrgRole)>, AuthDomainError> {
+        // Try last accessed first
+        if let Some(membership) = self
+            .member_repo
+            .find_last_accessed_by_user(user_id)
+            .await
+            .map_err(|e| AuthDomainError::InternalError(e.to_string()))?
+        {
+            // Verify org still exists and not deleted
+            if let Some(org) = self
+                .org_repo
+                .find_by_id(membership.organization_id())
+                .await
+                .map_err(|e| AuthDomainError::InternalError(e.to_string()))?
+            {
+                if !org.is_deleted() {
+                    return Ok(Some((
+                        OrgId::new(org.id().as_str().to_string()),
+                        *membership.role(),
+                    )));
+                }
+            }
+        }
+
+        // Fall back to personal org
+        if let Some(membership) = self
+            .member_repo
+            .find_personal_org_membership(user_id)
+            .await
+            .map_err(|e| AuthDomainError::InternalError(e.to_string()))?
+        {
+            return Ok(Some((
+                OrgId::new(membership.organization_id().as_str().to_string()),
+                *membership.role(),
+            )));
+        }
+
+        Ok(None)
     }
 
     /// Register a new user
@@ -81,13 +194,22 @@ where
         // 5. Save user
         self.user_repo.save(&user).await?;
 
-        // 6. Generate tokens
-        let token_pair = self
-            .token_service
-            .generate_token_pair(&user_id, email.as_str())
+        // 6. Create personal organization for the new user
+        let (org_id, org_role) = self
+            .create_personal_org_for_user(&user_id, email.as_str())
             .await?;
 
-        // 7. Store refresh token with device fingerprint
+        // 7. Generate tokens with org context
+        let org_context = Some(OrgContext {
+            org_id: org_id.as_str().to_string(),
+            org_role: org_role.as_str().to_string(),
+        });
+        let token_pair = self
+            .token_service
+            .generate_token_pair(&user_id, email.as_str(), org_context)
+            .await?;
+
+        // 8. Store refresh token with device fingerprint
         self.store_refresh_token(
             &user_id,
             &token_pair.refresh_token,
@@ -139,13 +261,25 @@ where
             _ => return Err(AuthDomainError::InvalidCredentials),
         };
 
-        // 6. Generate tokens
+        // 6. Get default organization for user (last accessed or personal)
+        let org_context = if let Some((org_id, org_role)) =
+            self.get_default_org_for_user(user.id()).await?
+        {
+            Some(OrgContext {
+                org_id: org_id.as_str().to_string(),
+                org_role: org_role.as_str().to_string(),
+            })
+        } else {
+            None
+        };
+
+        // 7. Generate tokens with org context
         let token_pair = self
             .token_service
-            .generate_token_pair(user.id(), user.email().as_str())
+            .generate_token_pair(user.id(), user.email().as_str(), org_context)
             .await?;
 
-        // 7. Store refresh token with device fingerprint
+        // 8. Store refresh token with device fingerprint
         self.store_refresh_token(
             user.id(),
             &token_pair.refresh_token,
@@ -211,14 +345,27 @@ where
         // 5. Revoke old token (token rotation)
         self.token_repo.revoke(stored_token.id()).await?;
 
-        // 6. Generate new token pair
+        // 6. Re-query default organization for user (last accessed or personal)
+        // This ensures tokens reflect current org context even if user switched orgs
         let user_id = UserId::new(claims.user_id);
+        let org_context = if let Some((org_id, org_role)) =
+            self.get_default_org_for_user(&user_id).await?
+        {
+            Some(OrgContext {
+                org_id: org_id.as_str().to_string(),
+                org_role: org_role.as_str().to_string(),
+            })
+        } else {
+            None
+        };
+
+        // 7. Generate new token pair with org context
         let token_pair = self
             .token_service
-            .generate_token_pair(&user_id, &claims.email)
+            .generate_token_pair(&user_id, &claims.email, org_context)
             .await?;
 
-        // 7. Store new refresh token with same device fingerprint
+        // 8. Store new refresh token with same device fingerprint
         self.store_refresh_token(
             &user_id,
             &token_pair.refresh_token,
@@ -423,7 +570,8 @@ mod tests {
         async fn generate_token_pair(
             &self,
             user_id: &UserId,
-            email: &str,
+            _email: &str,
+            _org_context: Option<crate::modules::auth::application::ports::OrgContext>,
         ) -> Result<TokenPair, AuthDomainError> {
             Ok(TokenPair {
                 access_token: format!("access_token_{}", user_id.as_str()),
@@ -439,6 +587,8 @@ mod tests {
                 Ok(TokenClaims {
                     user_id,
                     email: "test@example.com".to_string(),
+                    org_id: None,
+                    org_role: None,
                     exp: Utc::now().timestamp() + 900,
                     iat: Utc::now().timestamp(),
                 })
@@ -456,6 +606,8 @@ mod tests {
                 Ok(TokenClaims {
                     user_id,
                     email: "test@example.com".to_string(),
+                    org_id: None,
+                    org_role: None,
                     exp: Utc::now().timestamp() + 604800,
                     iat: Utc::now().timestamp(),
                 })
@@ -488,6 +640,183 @@ mod tests {
         }
     }
 
+    /// Mock Organization Repository
+    struct MockOrganizationRepository {
+        orgs: Mutex<HashMap<String, Organization>>,
+    }
+
+    impl MockOrganizationRepository {
+        fn new() -> Self {
+            Self {
+                orgs: Mutex::new(HashMap::new()),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl OrganizationRepository for MockOrganizationRepository {
+        async fn find_by_id(
+            &self,
+            id: &OrgId,
+        ) -> Result<Option<Organization>, crate::modules::organizations::domain::OrgDomainError> {
+            let orgs = self.orgs.lock().unwrap();
+            Ok(orgs.get(id.as_str()).cloned())
+        }
+
+        async fn find_by_slug(
+            &self,
+            slug: &str,
+        ) -> Result<Option<Organization>, crate::modules::organizations::domain::OrgDomainError> {
+            let orgs = self.orgs.lock().unwrap();
+            Ok(orgs.values().find(|o| o.slug().as_str() == slug).cloned())
+        }
+
+        async fn save(
+            &self,
+            org: &Organization,
+        ) -> Result<(), crate::modules::organizations::domain::OrgDomainError> {
+            let mut orgs = self.orgs.lock().unwrap();
+            orgs.insert(org.id().as_str().to_string(), org.clone());
+            Ok(())
+        }
+
+        async fn slug_exists(
+            &self,
+            slug: &str,
+        ) -> Result<bool, crate::modules::organizations::domain::OrgDomainError> {
+            let orgs = self.orgs.lock().unwrap();
+            Ok(orgs.values().any(|o| o.slug().as_str() == slug))
+        }
+    }
+
+    /// Mock Organization Member Repository
+    struct MockOrganizationMemberRepository {
+        members: Mutex<HashMap<String, OrganizationMember>>,
+    }
+
+    impl MockOrganizationMemberRepository {
+        fn new() -> Self {
+            Self {
+                members: Mutex::new(HashMap::new()),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl OrganizationMemberRepository for MockOrganizationMemberRepository {
+        async fn find_by_id(
+            &self,
+            id: &MemberId,
+        ) -> Result<Option<OrganizationMember>, crate::modules::organizations::domain::OrgDomainError>
+        {
+            let members = self.members.lock().unwrap();
+            Ok(members.get(id.as_str()).cloned())
+        }
+
+        async fn find_by_org_and_user(
+            &self,
+            org_id: &OrgId,
+            user_id: &UserId,
+        ) -> Result<Option<OrganizationMember>, crate::modules::organizations::domain::OrgDomainError>
+        {
+            let members = self.members.lock().unwrap();
+            Ok(members
+                .values()
+                .find(|m| {
+                    m.organization_id().as_str() == org_id.as_str()
+                        && m.user_id().as_str() == user_id.as_str()
+                })
+                .cloned())
+        }
+
+        async fn find_all_by_org(
+            &self,
+            org_id: &OrgId,
+        ) -> Result<Vec<OrganizationMember>, crate::modules::organizations::domain::OrgDomainError>
+        {
+            let members = self.members.lock().unwrap();
+            Ok(members
+                .values()
+                .filter(|m| m.organization_id().as_str() == org_id.as_str())
+                .cloned()
+                .collect())
+        }
+
+        async fn find_all_by_user(
+            &self,
+            user_id: &UserId,
+        ) -> Result<Vec<OrganizationMember>, crate::modules::organizations::domain::OrgDomainError>
+        {
+            let members = self.members.lock().unwrap();
+            Ok(members
+                .values()
+                .filter(|m| m.user_id().as_str() == user_id.as_str())
+                .cloned()
+                .collect())
+        }
+
+        async fn find_last_accessed_by_user(
+            &self,
+            user_id: &UserId,
+        ) -> Result<Option<OrganizationMember>, crate::modules::organizations::domain::OrgDomainError>
+        {
+            let members = self.members.lock().unwrap();
+            Ok(members
+                .values()
+                .filter(|m| m.user_id().as_str() == user_id.as_str() && m.last_accessed_at().is_some())
+                .max_by_key(|m| m.last_accessed_at())
+                .cloned())
+        }
+
+        async fn find_personal_org_membership(
+            &self,
+            _user_id: &UserId,
+        ) -> Result<Option<OrganizationMember>, crate::modules::organizations::domain::OrgDomainError>
+        {
+            // For tests, we don't track personal orgs, just return None
+            Ok(None)
+        }
+
+        async fn save(
+            &self,
+            member: &OrganizationMember,
+        ) -> Result<(), crate::modules::organizations::domain::OrgDomainError> {
+            let mut members = self.members.lock().unwrap();
+            members.insert(member.id().as_str().to_string(), member.clone());
+            Ok(())
+        }
+
+        async fn delete(
+            &self,
+            id: &MemberId,
+        ) -> Result<(), crate::modules::organizations::domain::OrgDomainError> {
+            let mut members = self.members.lock().unwrap();
+            members.remove(id.as_str());
+            Ok(())
+        }
+
+        async fn count_owners(
+            &self,
+            org_id: &OrgId,
+        ) -> Result<u32, crate::modules::organizations::domain::OrgDomainError> {
+            let members = self.members.lock().unwrap();
+            Ok(members
+                .values()
+                .filter(|m| {
+                    m.organization_id().as_str() == org_id.as_str()
+                        && m.role() == &OrgRole::Owner
+                })
+                .count() as u32)
+        }
+
+        async fn count_owners_for_update(
+            &self,
+            org_id: &OrgId,
+        ) -> Result<u32, crate::modules::organizations::domain::OrgDomainError> {
+            self.count_owners(org_id).await
+        }
+    }
+
     // ==================== Test Helpers ====================
 
     fn create_auth_service() -> AuthService<
@@ -496,6 +825,8 @@ mod tests {
         MockPasswordHasher,
         MockTokenService,
         MockIdGenerator,
+        MockOrganizationRepository,
+        MockOrganizationMemberRepository,
     > {
         AuthService::new(
             Arc::new(MockUserRepository::new()),
@@ -503,6 +834,8 @@ mod tests {
             Arc::new(MockPasswordHasher),
             Arc::new(MockTokenService::new()),
             Arc::new(MockIdGenerator::new()),
+            Arc::new(MockOrganizationRepository::new()),
+            Arc::new(MockOrganizationMemberRepository::new()),
         )
     }
 
@@ -514,6 +847,8 @@ mod tests {
         MockPasswordHasher,
         MockTokenService,
         MockIdGenerator,
+        MockOrganizationRepository,
+        MockOrganizationMemberRepository,
     > {
         AuthService::new(
             Arc::new(MockUserRepository::with_user(user)),
@@ -521,6 +856,8 @@ mod tests {
             Arc::new(MockPasswordHasher),
             Arc::new(MockTokenService::new()),
             Arc::new(MockIdGenerator::new()),
+            Arc::new(MockOrganizationRepository::new()),
+            Arc::new(MockOrganizationMemberRepository::new()),
         )
     }
 
@@ -685,6 +1022,8 @@ mod tests {
             Arc::new(MockPasswordHasher),
             Arc::new(MockTokenService::new()),
             Arc::new(MockIdGenerator::new()),
+            Arc::new(MockOrganizationRepository::new()),
+            Arc::new(MockOrganizationMemberRepository::new()),
         );
 
         let cmd = LogoutCommand {
@@ -732,6 +1071,8 @@ mod tests {
             Arc::new(MockPasswordHasher),
             Arc::new(MockTokenService::new()),
             Arc::new(MockIdGenerator::new()),
+            Arc::new(MockOrganizationRepository::new()),
+            Arc::new(MockOrganizationMemberRepository::new()),
         );
 
         let cmd = RefreshTokenCommand {
@@ -754,6 +1095,8 @@ mod tests {
             Arc::new(MockPasswordHasher),
             Arc::new(MockTokenService::failing_decode()),
             Arc::new(MockIdGenerator::new()),
+            Arc::new(MockOrganizationRepository::new()),
+            Arc::new(MockOrganizationMemberRepository::new()),
         );
 
         let cmd = RefreshTokenCommand {
@@ -798,6 +1141,8 @@ mod tests {
             Arc::new(MockPasswordHasher),
             Arc::new(MockTokenService::new()),
             Arc::new(MockIdGenerator::new()),
+            Arc::new(MockOrganizationRepository::new()),
+            Arc::new(MockOrganizationMemberRepository::new()),
         );
 
         let cmd = RefreshTokenCommand {

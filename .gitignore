@@ -2,3 +2,6 @@
 # IDE FILES
 .idea
 .claude
+
+# Frontend (development/testing only)
+frontend/
