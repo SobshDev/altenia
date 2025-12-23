@@ -11,6 +11,8 @@ pub enum AuthDomainError {
     UserNotFound,
     UserAlreadyExists,
     InvalidCredentials,
+    NoPasswordSet,
+    EmailAlreadyInUse,
 
     // Token errors
     TokenExpired,
@@ -30,6 +32,8 @@ impl fmt::Display for AuthDomainError {
             Self::UserNotFound => write!(f, "User not found"),
             Self::UserAlreadyExists => write!(f, "User already exists"),
             Self::InvalidCredentials => write!(f, "Invalid credentials"),
+            Self::NoPasswordSet => write!(f, "No password set for this account"),
+            Self::EmailAlreadyInUse => write!(f, "Email is already in use"),
             Self::TokenExpired => write!(f, "Token has expired"),
             Self::TokenInvalid => write!(f, "Token is invalid"),
             Self::TokenRevoked => write!(f, "Token has been revoked"),

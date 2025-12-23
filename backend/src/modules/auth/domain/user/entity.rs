@@ -79,6 +79,18 @@ impl User {
     pub fn has_password(&self) -> bool {
         self.password_hash.is_some()
     }
+
+    /// Update the user's email
+    pub fn update_email(&mut self, new_email: Email) {
+        self.email = new_email;
+        self.updated_at = Utc::now();
+    }
+
+    /// Update the user's password
+    pub fn update_password(&mut self, new_password_hash: PasswordHash) {
+        self.password_hash = Some(new_password_hash);
+        self.updated_at = Utc::now();
+    }
 }
 
 #[cfg(test)]

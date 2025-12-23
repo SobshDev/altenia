@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use super::extractors::AuthClaims;
 use crate::modules::auth::application::{
-    AuthResponse, AuthService, LoginCommand, LogoutCommand, RefreshTokenCommand,
-    RegisterUserCommand,
+    AuthResponse, AuthService, ChangeEmailCommand, ChangePasswordCommand, LoginCommand,
+    LogoutCommand, RefreshTokenCommand, RegisterUserCommand,
 };
 use crate::modules::auth::domain::{
     AuthDomainError, PasswordHasher, RefreshTokenRepository, UserRepository,
@@ -80,6 +80,18 @@ pub struct RefreshRequest {
 #[derive(Debug, Deserialize)]
 pub struct LogoutRequest {
     pub refresh_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangeEmailRequest {
+    pub current_password: String,
+    pub new_email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -156,6 +168,20 @@ fn to_error_response(e: AuthDomainError) -> (StatusCode, Json<ErrorResponse>) {
             Json(ErrorResponse {
                 error: "Invalid credentials".to_string(),
                 code: "INVALID_CREDENTIALS".to_string(),
+            }),
+        ),
+        AuthDomainError::NoPasswordSet => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "This account does not have a password set".to_string(),
+                code: "NO_PASSWORD_SET".to_string(),
+            }),
+        ),
+        AuthDomainError::EmailAlreadyInUse => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "Email is already in use".to_string(),
+                code: "EMAIL_IN_USE".to_string(),
             }),
         ),
         AuthDomainError::TokenExpired => (
@@ -328,5 +354,61 @@ where
                 email: user.email().as_str().to_string(),
             })
         })
+        .map_err(to_error_response)
+}
+
+/// PATCH /api/auth/me/email (protected)
+pub async fn change_email<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req): Json<ChangeEmailRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+where
+    U: UserRepository,
+    T: RefreshTokenRepository,
+    P: PasswordHasher,
+    TS: TokenService,
+    ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+{
+    let cmd = ChangeEmailCommand {
+        user_id: claims.user_id,
+        current_password: req.current_password,
+        new_email: req.new_email,
+    };
+
+    auth_service
+        .change_email(cmd)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(to_error_response)
+}
+
+/// PATCH /api/auth/me/password (protected)
+pub async fn change_password<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req): Json<ChangePasswordRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+where
+    U: UserRepository,
+    T: RefreshTokenRepository,
+    P: PasswordHasher,
+    TS: TokenService,
+    ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+{
+    let cmd = ChangePasswordCommand {
+        user_id: claims.user_id,
+        current_password: req.current_password,
+        new_password: req.new_password,
+    };
+
+    auth_service
+        .change_password(cmd)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
         .map_err(to_error_response)
 }

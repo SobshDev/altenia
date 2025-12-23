@@ -34,6 +34,22 @@ pub struct RefreshTokenCommand {
     pub device_fingerprint: String, // Hash of User-Agent + IP subnet
 }
 
+/// Command to change user's email
+#[derive(Debug, Clone)]
+pub struct ChangeEmailCommand {
+    pub user_id: String,
+    pub current_password: String,
+    pub new_email: String,
+}
+
+/// Command to change user's password
+#[derive(Debug, Clone)]
+pub struct ChangePasswordCommand {
+    pub user_id: String,
+    pub current_password: String,
+    pub new_password: String,
+}
+
 // ============================================================================
 // Responses (outputs)
 // ============================================================================

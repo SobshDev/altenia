@@ -4,7 +4,8 @@ use chrono::{Duration, Utc};
 use rand::Rng;
 
 use crate::modules::auth::application::dto::{
-    AuthResponse, LoginCommand, LogoutCommand, RefreshTokenCommand, RegisterUserCommand,
+    AuthResponse, ChangeEmailCommand, ChangePasswordCommand, LoginCommand, LogoutCommand,
+    RefreshTokenCommand, RegisterUserCommand,
 };
 use crate::modules::auth::application::ports::{IdGenerator, OrgContext, TokenService};
 use crate::modules::auth::domain::{
@@ -390,6 +391,90 @@ where
             .find_by_id(&user_id)
             .await?
             .ok_or(AuthDomainError::UserNotFound)
+    }
+
+    /// Change user's email address
+    pub async fn change_email(&self, cmd: ChangeEmailCommand) -> Result<(), AuthDomainError> {
+        // 1. Validate new email format
+        let new_email = Email::new(cmd.new_email)?;
+
+        // 2. Get current user
+        let user_id = UserId::new(cmd.user_id);
+        let mut user = self
+            .user_repo
+            .find_by_id(&user_id)
+            .await?
+            .ok_or(AuthDomainError::UserNotFound)?;
+
+        // 3. Check user has a password (not OAuth-only)
+        let password_hash = user
+            .password_hash()
+            .cloned()
+            .ok_or(AuthDomainError::NoPasswordSet)?;
+
+        // 4. Verify current password
+        let current_password = PlainPassword::for_verification(cmd.current_password);
+        let is_valid = self
+            .password_hasher
+            .verify(&current_password, &password_hash)
+            .await?;
+        if !is_valid {
+            return Err(AuthDomainError::InvalidCredentials);
+        }
+
+        // 5. Check if new email is already in use (by another user)
+        if self.user_repo.exists_by_email(&new_email).await? {
+            // If same email (case normalization), no change needed
+            if user.email().as_str() != new_email.as_str() {
+                return Err(AuthDomainError::EmailAlreadyInUse);
+            }
+            return Ok(());
+        }
+
+        // 6. Update email
+        user.update_email(new_email);
+
+        // 7. Persist changes
+        self.user_repo.save(&user).await
+    }
+
+    /// Change user's password
+    pub async fn change_password(&self, cmd: ChangePasswordCommand) -> Result<(), AuthDomainError> {
+        // 1. Validate new password strength
+        let new_password = PlainPassword::new(cmd.new_password)?;
+
+        // 2. Get current user
+        let user_id = UserId::new(cmd.user_id);
+        let mut user = self
+            .user_repo
+            .find_by_id(&user_id)
+            .await?
+            .ok_or(AuthDomainError::UserNotFound)?;
+
+        // 3. Check user has a password (not OAuth-only)
+        let password_hash = user
+            .password_hash()
+            .cloned()
+            .ok_or(AuthDomainError::NoPasswordSet)?;
+
+        // 4. Verify current password
+        let current_password = PlainPassword::for_verification(cmd.current_password);
+        let is_valid = self
+            .password_hasher
+            .verify(&current_password, &password_hash)
+            .await?;
+        if !is_valid {
+            return Err(AuthDomainError::InvalidCredentials);
+        }
+
+        // 5. Hash new password
+        let new_password_hash = self.password_hasher.hash(&new_password).await?;
+
+        // 6. Update password
+        user.update_password(new_password_hash);
+
+        // 7. Persist changes
+        self.user_repo.save(&user).await
     }
 
     /// Helper: store refresh token in database

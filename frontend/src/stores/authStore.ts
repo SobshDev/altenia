@@ -13,6 +13,8 @@ interface AuthState {
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearError: () => void;
+  updateEmail: (newEmail: string, currentPassword: string) => Promise<void>;
+  updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -105,4 +107,21 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  updateEmail: async (newEmail: string, currentPassword: string) => {
+    await apiClient.patch('/auth/me/email', {
+      new_email: newEmail,
+      current_password: currentPassword,
+    });
+    set((state) => ({
+      user: state.user ? { ...state.user, email: newEmail } : null,
+    }));
+  },
+
+  updatePassword: async (currentPassword: string, newPassword: string) => {
+    await apiClient.patch('/auth/me/password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+  },
 }));
