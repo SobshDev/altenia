@@ -23,6 +23,7 @@ impl PostgresRefreshTokenRepository {
             TokenId::new(row.id),
             UserId::new(row.user_id),
             row.token_hash,
+            row.device_fingerprint,
             row.expires_at,
             row.created_at,
             row.revoked_at,
@@ -35,13 +36,14 @@ impl RefreshTokenRepository for PostgresRefreshTokenRepository {
     async fn save(&self, token: &RefreshToken) -> Result<(), AuthDomainError> {
         sqlx::query(
             r#"
-            INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, created_at, revoked_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO refresh_tokens (id, user_id, token_hash, device_fingerprint, expires_at, created_at, revoked_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
         )
         .bind(token.id().as_str())
         .bind(token.user_id().as_str())
         .bind(token.token_hash())
+        .bind(token.device_fingerprint())
         .bind(token.expires_at())
         .bind(token.created_at())
         .bind(token.revoked_at())
@@ -55,7 +57,7 @@ impl RefreshTokenRepository for PostgresRefreshTokenRepository {
     async fn find_by_id(&self, id: &TokenId) -> Result<Option<RefreshToken>, AuthDomainError> {
         let row: Option<RefreshTokenRow> = sqlx::query_as(
             r#"
-            SELECT id, user_id, token_hash, expires_at, created_at, revoked_at
+            SELECT id, user_id, token_hash, device_fingerprint, expires_at, created_at, revoked_at
             FROM refresh_tokens
             WHERE id = $1
             "#,
@@ -71,7 +73,7 @@ impl RefreshTokenRepository for PostgresRefreshTokenRepository {
     async fn find_by_hash(&self, hash: &str) -> Result<Option<RefreshToken>, AuthDomainError> {
         let row: Option<RefreshTokenRow> = sqlx::query_as(
             r#"
-            SELECT id, user_id, token_hash, expires_at, created_at, revoked_at
+            SELECT id, user_id, token_hash, device_fingerprint, expires_at, created_at, revoked_at
             FROM refresh_tokens
             WHERE token_hash = $1
             "#,

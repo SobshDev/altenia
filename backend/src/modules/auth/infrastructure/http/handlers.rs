@@ -1,16 +1,59 @@
-use axum::{extract::State, http::StatusCode, Extension, Json};
+use axum::{
+    extract::State,
+    http::{header::USER_AGENT, HeaderMap, StatusCode},
+    Extension, Json,
+};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 use super::extractors::AuthClaims;
 use crate::modules::auth::application::{
     AuthResponse, AuthService, LoginCommand, LogoutCommand, RefreshTokenCommand,
-    RegisterUserCommand, UserDto,
+    RegisterUserCommand,
 };
 use crate::modules::auth::domain::{
     AuthDomainError, PasswordHasher, RefreshTokenRepository, UserRepository,
 };
 use crate::modules::auth::application::ports::{IdGenerator, TokenService};
+
+/// Generate device fingerprint from User-Agent and X-Forwarded-For headers
+/// Uses /24 subnet for IPv4 to allow for NAT variations
+fn generate_device_fingerprint(headers: &HeaderMap) -> String {
+    let user_agent = headers
+        .get(USER_AGENT)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("unknown");
+
+    // Try to get IP from X-Forwarded-For header (common in proxied setups)
+    let ip_str = headers
+        .get("X-Forwarded-For")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim())
+        .unwrap_or("unknown");
+
+    // Extract /24 subnet for IPv4 or use as-is for others
+    let ip_subnet = if let Some(ip) = ip_str.parse::<std::net::IpAddr>().ok() {
+        match ip {
+            std::net::IpAddr::V4(ipv4) => {
+                let octets = ipv4.octets();
+                format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2])
+            }
+            std::net::IpAddr::V6(ipv6) => {
+                let segments = ipv6.segments();
+                format!("{:x}:{:x}:{:x}::/48", segments[0], segments[1], segments[2])
+            }
+        }
+    } else {
+        ip_str.to_string()
+    };
+
+    let mut hasher = Sha256::new();
+    hasher.update(user_agent.as_bytes());
+    hasher.update(ip_subnet.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
 
 // ============================================================================
 // Request/Response DTOs for HTTP layer
@@ -148,6 +191,7 @@ fn to_error_response(e: AuthDomainError) -> (StatusCode, Json<ErrorResponse>) {
 /// POST /api/auth/register
 pub async fn register<U, T, P, TS, ID>(
     State(auth_service): State<Arc<AuthService<U, T, P, TS, ID>>>,
+    headers: HeaderMap,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponseDto>, (StatusCode, Json<ErrorResponse>)>
 where
@@ -157,9 +201,12 @@ where
     TS: TokenService,
     ID: IdGenerator,
 {
+    let device_fingerprint = generate_device_fingerprint(&headers);
+
     let cmd = RegisterUserCommand {
         email: req.email,
         password: req.password,
+        device_fingerprint,
     };
 
     auth_service
@@ -172,6 +219,7 @@ where
 /// POST /api/auth/login
 pub async fn login<U, T, P, TS, ID>(
     State(auth_service): State<Arc<AuthService<U, T, P, TS, ID>>>,
+    headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<AuthResponseDto>, (StatusCode, Json<ErrorResponse>)>
 where
@@ -181,9 +229,12 @@ where
     TS: TokenService,
     ID: IdGenerator,
 {
+    let device_fingerprint = generate_device_fingerprint(&headers);
+
     let cmd = LoginCommand {
         email: req.email,
         password: req.password,
+        device_fingerprint,
     };
 
     auth_service
@@ -196,6 +247,7 @@ where
 /// POST /api/auth/refresh
 pub async fn refresh<U, T, P, TS, ID>(
     State(auth_service): State<Arc<AuthService<U, T, P, TS, ID>>>,
+    headers: HeaderMap,
     Json(req): Json<RefreshRequest>,
 ) -> Result<Json<AuthResponseDto>, (StatusCode, Json<ErrorResponse>)>
 where
@@ -205,8 +257,11 @@ where
     TS: TokenService,
     ID: IdGenerator,
 {
+    let device_fingerprint = generate_device_fingerprint(&headers);
+
     let cmd = RefreshTokenCommand {
         refresh_token: req.refresh_token,
+        device_fingerprint,
     };
 
     auth_service

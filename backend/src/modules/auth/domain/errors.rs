@@ -24,7 +24,7 @@ pub enum AuthDomainError {
 impl fmt::Display for AuthDomainError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidEmail(email) => write!(f, "Invalid email: {}", email),
+            Self::InvalidEmail(_) => write!(f, "Invalid email format"),
             Self::InvalidPassword(msg) => write!(f, "Invalid password: {}", msg),
             Self::WeakPassword(reason) => write!(f, "Password is too weak: {}", reason),
             Self::UserNotFound => write!(f, "User not found"),

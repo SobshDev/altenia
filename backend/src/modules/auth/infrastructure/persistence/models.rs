@@ -17,6 +17,7 @@ pub struct RefreshTokenRow {
     pub id: String,
     pub user_id: String,
     pub token_hash: String,
+    pub device_fingerprint: String,
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,

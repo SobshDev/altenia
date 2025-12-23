@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -81,7 +81,7 @@ impl TokenService for JwtTokenService {
         };
 
         let access_token = encode(
-            &Header::default(),
+            &Header::new(Algorithm::HS256),
             &access_claims,
             &EncodingKey::from_secret(self.config.access_secret.as_bytes()),
         )
@@ -97,7 +97,7 @@ impl TokenService for JwtTokenService {
         };
 
         let refresh_token = encode(
-            &Header::default(),
+            &Header::new(Algorithm::HS256),
             &refresh_claims,
             &EncodingKey::from_secret(self.config.refresh_secret.as_bytes()),
         )

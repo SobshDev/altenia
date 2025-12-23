@@ -87,9 +87,14 @@ where
             .generate_token_pair(&user_id, email.as_str())
             .await?;
 
-        // 7. Store refresh token
-        self.store_refresh_token(&user_id, &token_pair.refresh_token, token_pair.refresh_expires_in)
-            .await?;
+        // 7. Store refresh token with device fingerprint
+        self.store_refresh_token(
+            &user_id,
+            &token_pair.refresh_token,
+            &cmd.device_fingerprint,
+            token_pair.refresh_expires_in,
+        )
+        .await?;
 
         Ok(AuthResponse::new(
             user_id.into_inner(),
@@ -104,7 +109,8 @@ where
     pub async fn login(&self, cmd: LoginCommand) -> Result<AuthResponse, AuthDomainError> {
         // 1. Validate email format
         let email = Email::new(cmd.email)?;
-        let password = PlainPassword::new(cmd.password)?;
+        // Use for_verification to skip strength validation - we only need to compare against hash
+        let password = PlainPassword::for_verification(cmd.password);
 
         // 2. Find user (don't early-return to prevent timing attacks)
         let user_opt = self.user_repo.find_by_email(&email).await?;
@@ -139,9 +145,14 @@ where
             .generate_token_pair(user.id(), user.email().as_str())
             .await?;
 
-        // 7. Store refresh token
-        self.store_refresh_token(user.id(), &token_pair.refresh_token, token_pair.refresh_expires_in)
-            .await?;
+        // 7. Store refresh token with device fingerprint
+        self.store_refresh_token(
+            user.id(),
+            &token_pair.refresh_token,
+            &cmd.device_fingerprint,
+            token_pair.refresh_expires_in,
+        )
+        .await?;
 
         Ok(AuthResponse::new(
             user.id().as_str().to_string(),
@@ -190,19 +201,31 @@ where
             return Err(AuthDomainError::TokenRevoked);
         }
 
-        // 4. Revoke old token (token rotation)
+        // 4. Validate device fingerprint matches
+        if !stored_token.matches_fingerprint(&cmd.device_fingerprint) {
+            // Token used from different device - suspicious activity, revoke it
+            self.token_repo.revoke(stored_token.id()).await?;
+            return Err(AuthDomainError::TokenInvalid);
+        }
+
+        // 5. Revoke old token (token rotation)
         self.token_repo.revoke(stored_token.id()).await?;
 
-        // 5. Generate new token pair
+        // 6. Generate new token pair
         let user_id = UserId::new(claims.user_id);
         let token_pair = self
             .token_service
             .generate_token_pair(&user_id, &claims.email)
             .await?;
 
-        // 6. Store new refresh token
-        self.store_refresh_token(&user_id, &token_pair.refresh_token, token_pair.refresh_expires_in)
-            .await?;
+        // 7. Store new refresh token with same device fingerprint
+        self.store_refresh_token(
+            &user_id,
+            &token_pair.refresh_token,
+            &cmd.device_fingerprint,
+            token_pair.refresh_expires_in,
+        )
+        .await?;
 
         Ok(AuthResponse::new(
             user_id.into_inner(),
@@ -227,13 +250,20 @@ where
         &self,
         user_id: &UserId,
         refresh_token: &str,
+        device_fingerprint: &str,
         expires_in_secs: i64,
     ) -> Result<(), AuthDomainError> {
         let token_hash = self.token_service.hash_refresh_token(refresh_token);
         let token_id = TokenId::new(self.id_generator.generate());
         let expires_at = Utc::now() + Duration::seconds(expires_in_secs);
 
-        let token = RefreshToken::new(token_id, user_id.clone(), token_hash, expires_at);
+        let token = RefreshToken::new(
+            token_id,
+            user_id.clone(),
+            token_hash,
+            device_fingerprint.to_string(),
+            expires_at,
+        );
 
         self.token_repo.save(&token).await
     }

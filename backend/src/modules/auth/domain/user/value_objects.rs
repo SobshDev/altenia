@@ -79,7 +79,16 @@ impl PasswordHash {
 pub struct PlainPassword(String);
 
 impl PlainPassword {
+    const MAX_LENGTH: usize = 128;
+
     pub fn new(password: String) -> Result<Self, AuthDomainError> {
+        // Maximum length to prevent DoS via slow hashing
+        if password.len() > Self::MAX_LENGTH {
+            return Err(AuthDomainError::WeakPassword(
+                format!("must not exceed {} characters", Self::MAX_LENGTH),
+            ));
+        }
+
         // Minimum 8 characters
         if password.len() < 8 {
             return Err(AuthDomainError::WeakPassword(
@@ -117,6 +126,12 @@ impl PlainPassword {
         }
 
         Ok(Self(password))
+    }
+
+    /// Create PlainPassword for verification only (skips strength validation)
+    /// Use this for login - we only need to compare against stored hash
+    pub fn for_verification(password: String) -> Self {
+        Self(password)
     }
 
     pub fn as_str(&self) -> &str {
@@ -183,5 +198,19 @@ mod tests {
     fn test_weak_password_no_special_char() {
         let result = PlainPassword::new("Password1".to_string());
         assert!(matches!(result, Err(AuthDomainError::WeakPassword(msg)) if msg.contains("special")));
+    }
+
+    #[test]
+    fn test_password_too_long() {
+        let long_password = "A".repeat(129) + "a1!";
+        let result = PlainPassword::new(long_password);
+        assert!(matches!(result, Err(AuthDomainError::WeakPassword(msg)) if msg.contains("128")));
+    }
+
+    #[test]
+    fn test_for_verification_skips_validation() {
+        // This would fail new() validation but should work with for_verification
+        let password = PlainPassword::for_verification("weak".to_string());
+        assert_eq!(password.as_str(), "weak");
     }
 }

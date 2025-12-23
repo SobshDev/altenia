@@ -88,6 +88,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create rate limiter (10 requests per minute per IP)
     let rate_limiter = Arc::new(IpRateLimiter::new(10));
 
+    // Spawn background task for rate limiter cleanup
+    {
+        let cleanup_limiter = rate_limiter.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(5 * 60)); // 5 minutes
+            loop {
+                interval.tick().await;
+                cleanup_limiter.cleanup_if_needed(10_000).await;
+            }
+        });
+        tracing::info!("Rate limiter cleanup task started (runs every 5 minutes, max 10k entries)");
+    }
+
     // Create router
     let app = Router::new()
         .nest("/api/auth", auth_routes(auth_service, token_service, rate_limiter))

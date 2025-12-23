@@ -33,6 +33,7 @@ pub struct RefreshToken {
     id: TokenId,
     user_id: UserId,
     token_hash: String, // SHA256 hash of the actual token
+    device_fingerprint: String, // Hash of User-Agent + IP subnet for device binding
     expires_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
@@ -44,12 +45,14 @@ impl RefreshToken {
         id: TokenId,
         user_id: UserId,
         token_hash: String,
+        device_fingerprint: String,
         expires_at: DateTime<Utc>,
     ) -> Self {
         Self {
             id,
             user_id,
             token_hash,
+            device_fingerprint,
             expires_at,
             created_at: Utc::now(),
             revoked_at: None,
@@ -61,6 +64,7 @@ impl RefreshToken {
         id: TokenId,
         user_id: UserId,
         token_hash: String,
+        device_fingerprint: String,
         expires_at: DateTime<Utc>,
         created_at: DateTime<Utc>,
         revoked_at: Option<DateTime<Utc>>,
@@ -69,6 +73,7 @@ impl RefreshToken {
             id,
             user_id,
             token_hash,
+            device_fingerprint,
             expires_at,
             created_at,
             revoked_at,
@@ -86,6 +91,10 @@ impl RefreshToken {
 
     pub fn token_hash(&self) -> &str {
         &self.token_hash
+    }
+
+    pub fn device_fingerprint(&self) -> &str {
+        &self.device_fingerprint
     }
 
     pub fn expires_at(&self) -> DateTime<Utc> {
@@ -113,6 +122,11 @@ impl RefreshToken {
         !self.is_expired() && !self.is_revoked()
     }
 
+    /// Check if the token matches the given device fingerprint
+    pub fn matches_fingerprint(&self, fingerprint: &str) -> bool {
+        self.device_fingerprint == fingerprint
+    }
+
     /// Revoke this token
     pub fn revoke(&mut self) {
         if self.revoked_at.is_none() {
@@ -134,18 +148,24 @@ mod tests {
         UserId::new("test-user-id".to_string())
     }
 
+    fn create_test_fingerprint() -> String {
+        "test-fingerprint-hash".to_string()
+    }
+
     #[test]
     fn test_new_refresh_token() {
         let token_id = create_test_token_id();
         let user_id = create_test_user_id();
         let token_hash = "hashed_token".to_string();
+        let fingerprint = create_test_fingerprint();
         let expires_at = Utc::now() + Duration::days(7);
 
-        let token = RefreshToken::new(token_id, user_id, token_hash.clone(), expires_at);
+        let token = RefreshToken::new(token_id, user_id, token_hash.clone(), fingerprint.clone(), expires_at);
 
         assert_eq!(token.id().as_str(), "test-token-id");
         assert_eq!(token.user_id().as_str(), "test-user-id");
         assert_eq!(token.token_hash(), token_hash);
+        assert_eq!(token.device_fingerprint(), fingerprint);
         assert_eq!(token.expires_at(), expires_at);
         assert!(token.revoked_at().is_none());
     }
@@ -156,6 +176,7 @@ mod tests {
             create_test_token_id(),
             create_test_user_id(),
             "hash".to_string(),
+            create_test_fingerprint(),
             Utc::now() + Duration::days(7),
         );
 
@@ -170,6 +191,7 @@ mod tests {
             create_test_token_id(),
             create_test_user_id(),
             "hash".to_string(),
+            create_test_fingerprint(),
             Utc::now() - Duration::seconds(1), // expired 1 second ago
         );
 
@@ -183,6 +205,7 @@ mod tests {
             create_test_token_id(),
             create_test_user_id(),
             "hash".to_string(),
+            create_test_fingerprint(),
             Utc::now() + Duration::days(7),
         );
 
@@ -202,6 +225,7 @@ mod tests {
             create_test_token_id(),
             create_test_user_id(),
             "hash".to_string(),
+            create_test_fingerprint(),
             Utc::now() + Duration::days(7),
         );
 
@@ -222,6 +246,7 @@ mod tests {
         let token_id = create_test_token_id();
         let user_id = create_test_user_id();
         let token_hash = "hash".to_string();
+        let fingerprint = create_test_fingerprint();
         let expires_at = Utc::now() + Duration::days(7);
         let created_at = Utc::now() - Duration::hours(1);
         let revoked_at = Some(Utc::now());
@@ -230,6 +255,7 @@ mod tests {
             token_id,
             user_id,
             token_hash.clone(),
+            fingerprint.clone(),
             expires_at,
             created_at,
             revoked_at,
@@ -237,8 +263,24 @@ mod tests {
 
         assert_eq!(token.id().as_str(), "test-token-id");
         assert_eq!(token.token_hash(), token_hash);
+        assert_eq!(token.device_fingerprint(), fingerprint);
         assert_eq!(token.created_at(), created_at);
         assert!(token.is_revoked());
+    }
+
+    #[test]
+    fn test_matches_fingerprint() {
+        let fingerprint = create_test_fingerprint();
+        let token = RefreshToken::new(
+            create_test_token_id(),
+            create_test_user_id(),
+            "hash".to_string(),
+            fingerprint.clone(),
+            Utc::now() + Duration::days(7),
+        );
+
+        assert!(token.matches_fingerprint(&fingerprint));
+        assert!(!token.matches_fingerprint("different-fingerprint"));
     }
 
     #[test]

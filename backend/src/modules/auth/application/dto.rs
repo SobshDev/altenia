@@ -5,17 +5,19 @@ use serde::{Deserialize, Serialize};
 // ============================================================================
 
 /// Command to register a new user
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RegisterUserCommand {
     pub email: String,
     pub password: String,
+    pub device_fingerprint: String, // Hash of User-Agent + IP subnet
 }
 
 /// Command to login
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct LoginCommand {
     pub email: String,
     pub password: String,
+    pub device_fingerprint: String, // Hash of User-Agent + IP subnet
 }
 
 /// Command to logout
@@ -26,9 +28,10 @@ pub struct LogoutCommand {
 }
 
 /// Command to refresh tokens
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RefreshTokenCommand {
     pub refresh_token: String,
+    pub device_fingerprint: String, // Hash of User-Agent + IP subnet
 }
 
 // ============================================================================

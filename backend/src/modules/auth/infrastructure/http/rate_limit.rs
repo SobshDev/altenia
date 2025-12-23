@@ -62,6 +62,29 @@ impl IpRateLimiter {
         let limiter = self.get_or_create_limiter(ip).await;
         limiter.check().is_ok()
     }
+
+    /// Remove all entries when cache exceeds max size to prevent memory exhaustion
+    /// Should be called periodically from a background task
+    pub async fn cleanup_if_needed(&self, max_entries: usize) {
+        let should_clear = {
+            let limiters = self.limiters.read().await;
+            limiters.len() > max_entries
+        };
+
+        if should_clear {
+            let mut limiters = self.limiters.write().await;
+            // Double-check after acquiring write lock
+            if limiters.len() > max_entries {
+                let old_size = limiters.len();
+                limiters.clear();
+                tracing::info!(
+                    old_size = old_size,
+                    max_entries = max_entries,
+                    "Rate limiter cache cleared to prevent memory exhaustion"
+                );
+            }
+        }
+    }
 }
 
 /// Rate limiting middleware for axum
