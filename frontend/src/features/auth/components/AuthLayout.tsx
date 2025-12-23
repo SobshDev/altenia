@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { useLocation } from 'react-router';
 
 function Logo({ className = '' }: { className?: string }) {
   return (
@@ -44,17 +43,6 @@ interface AuthLayoutProps {
 
 export function AuthLayout({ children, title, subtitle, alternateAction, heroContent }: AuthLayoutProps) {
   const location = useLocation();
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    setIsVisible(false);
-    const timer = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setIsVisible(true);
-      });
-    });
-    return () => cancelAnimationFrame(timer);
-  }, [location.pathname]);
 
   return (
     <div className="min-h-screen flex">
@@ -78,11 +66,8 @@ export function AuthLayout({ children, title, subtitle, alternateAction, heroCon
             <span className="text-2xl font-bold">Altenia</span>
           </div>
 
-          <div
-            className={`transition-opacity duration-500 ease-out ${
-              isVisible ? 'opacity-100' : 'opacity-0'
-            }`}
-          >
+          {/* Animated hero content - key forces re-mount on route change */}
+          <div key={location.pathname}>
             {heroContent}
           </div>
 
@@ -100,47 +85,65 @@ export function AuthLayout({ children, title, subtitle, alternateAction, heroCon
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-accent/10 rounded-full blur-3xl" />
         </div>
 
-        <div
-          className={`w-full max-w-md relative z-10 transition-all duration-500 ease-out ${
-            isVisible
-              ? 'opacity-100 translate-y-0'
-              : 'opacity-0 translate-y-6'
-          }`}
-        >
+        {/* Key forces re-mount and animation replay on route change */}
+        <div key={location.pathname} className="w-full max-w-md relative z-10">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <Logo className="w-10 h-10" />
             <span className="text-2xl font-bold text-foreground">Altenia</span>
           </div>
 
-          {/* Form card */}
-          <div className="glass-card rounded-2xl p-8 sm:p-10 glow">
+          {/* Form card with scale animation */}
+          <div
+            className="glass-card rounded-2xl p-8 sm:p-10 glow animate-fade-in-scale"
+            style={{ '--stagger': '0ms' } as React.CSSProperties}
+          >
+            {/* Header with staggered reveal */}
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-foreground">
+              <h2
+                className="text-2xl font-bold text-foreground animate-fade-in-up"
+                style={{ '--stagger': '100ms' } as React.CSSProperties}
+              >
                 {title}
               </h2>
-              <p className="mt-2 text-foreground-muted">
+              <p
+                className="mt-2 text-foreground-muted animate-fade-in-up"
+                style={{ '--stagger': '200ms' } as React.CSSProperties}
+              >
                 {subtitle}
               </p>
             </div>
 
-            {children}
+            {/* Form with animation */}
+            <div
+              className="animate-fade-in-up"
+              style={{ '--stagger': '300ms' } as React.CSSProperties}
+            >
+              {children}
+            </div>
 
-            <div className="mt-8 pt-6 border-t border-border">
+            {/* Footer link */}
+            <div
+              className="mt-8 pt-6 border-t border-border animate-fade-in-up"
+              style={{ '--stagger': '500ms' } as React.CSSProperties}
+            >
               <p className="text-center text-sm text-foreground-muted">
                 {alternateAction.text}{' '}
-                <Link
-                  to={alternateAction.href}
+                <a
+                  href={alternateAction.href}
                   className="font-semibold text-primary hover:text-primary-hover transition-colors"
                 >
                   {alternateAction.linkText}
-                </Link>
+                </a>
               </p>
             </div>
           </div>
 
           {/* Footer for mobile */}
-          <p className="lg:hidden mt-8 text-center text-xs text-foreground-subtle">
+          <p
+            className="lg:hidden mt-8 text-center text-xs text-foreground-subtle animate-fade-in-up"
+            style={{ '--stagger': '600ms' } as React.CSSProperties}
+          >
             &copy; {new Date().getFullYear()} Altenia. All rights reserved.
           </p>
         </div>

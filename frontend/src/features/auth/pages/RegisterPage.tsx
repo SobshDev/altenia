@@ -11,18 +11,33 @@ import { AuthLayout } from '../components/AuthLayout';
 function RegisterHeroContent() {
   return (
     <div className="max-w-md">
-      <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-6">
-        Start your
-        <br />
-        <span className="text-white/80">observability journey.</span>
+      <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-6 overflow-hidden">
+        <span
+          className="block animate-text-reveal"
+          style={{ '--stagger': '0ms' } as React.CSSProperties}
+        >
+          Start your
+        </span>
+        <span
+          className="block text-white/80 animate-text-reveal"
+          style={{ '--stagger': '150ms' } as React.CSSProperties}
+        >
+          observability journey.
+        </span>
       </h1>
-      <p className="text-lg text-white/70 leading-relaxed">
+      <p
+        className="text-lg text-white/70 leading-relaxed animate-fade-in-up"
+        style={{ '--stagger': '350ms' } as React.CSSProperties}
+      >
         Create your free account and get instant access to powerful observability tools.
         No credit card required.
       </p>
 
       <div className="mt-10 space-y-4">
-        <div className="flex items-center gap-3">
+        <div
+          className="flex items-center gap-3 animate-slide-in-right"
+          style={{ '--stagger': '500ms' } as React.CSSProperties}
+        >
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -30,7 +45,10 @@ function RegisterHeroContent() {
           </div>
           <span className="text-white/80">Unlimited log ingestion</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div
+          className="flex items-center gap-3 animate-slide-in-right"
+          style={{ '--stagger': '600ms' } as React.CSSProperties}
+        >
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -38,7 +56,10 @@ function RegisterHeroContent() {
           </div>
           <span className="text-white/80">Real-time metrics & traces</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div
+          className="flex items-center gap-3 animate-slide-in-right"
+          style={{ '--stagger': '700ms' } as React.CSSProperties}
+        >
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
