@@ -31,3 +31,16 @@ pub struct LogStatsRow {
     pub oldest_log: Option<DateTime<Utc>>,
     pub newest_log: Option<DateTime<Utc>>,
 }
+
+/// Database row for filter_presets table
+#[derive(Debug, FromRow)]
+pub struct FilterPresetRow {
+    pub id: String,
+    pub project_id: String,
+    pub user_id: String,
+    pub name: String,
+    pub filter_config: Value,
+    pub is_default: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

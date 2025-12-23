@@ -4,8 +4,8 @@ use crate::modules::auth::application::ports::IdGenerator;
 use crate::modules::auth::domain::UserId;
 use crate::modules::logging::application::dto::*;
 use crate::modules::logging::domain::{
-    LogDomainError, LogEntry, LogFilters, LogId, LogLevel, LogRepository, LogStats, Pagination,
-    SortOrder, SpanId, TraceId,
+    LogDomainError, LogEntry, LogFilters, LogId, LogLevel, LogRepository, LogStats,
+    MetadataFilter, MetadataOperator, Pagination, SortOrder, SpanId, TraceId,
 };
 use crate::modules::organizations::domain::{OrgId, OrganizationMemberRepository};
 use crate::modules::projects::domain::{ProjectId, ProjectRepository};
@@ -225,6 +225,17 @@ where
             })
             .transpose()?;
 
+        // Convert metadata filter inputs to domain MetadataFilter
+        let metadata_filters = filters
+            .metadata_filters
+            .unwrap_or_default()
+            .into_iter()
+            .map(|input| {
+                let operator = MetadataOperator::from_str(&input.operator)?;
+                MetadataFilter::new(input.key, operator, input.value)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(LogFilters {
             levels,
             start_time: filters.start_time,
@@ -232,6 +243,7 @@ where
             source: filters.source,
             search: filters.search,
             trace_id: filters.trace_id,
+            metadata_filters,
         })
     }
 

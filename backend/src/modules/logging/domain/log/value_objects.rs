@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::modules::logging::domain::errors::LogDomainError;
 
 /// Log ID - wrapper around UUID string
@@ -25,7 +27,8 @@ impl From<String> for LogId {
 }
 
 /// Log Level - defines severity of log entry
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Trace,
     Debug,

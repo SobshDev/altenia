@@ -16,6 +16,11 @@ pub enum LogDomainError {
     ApiKeyRevoked,
     ApiKeyExpired,
 
+    // Filter Preset errors
+    InvalidFilterPreset(String),
+    FilterPresetNotFound,
+    FilterPresetNameExists,
+
     // Permission errors
     InsufficientPermissions,
     NotOrgMember,
@@ -35,6 +40,9 @@ impl fmt::Display for LogDomainError {
             Self::ApiKeyInvalid => write!(f, "Invalid API key"),
             Self::ApiKeyRevoked => write!(f, "API key has been revoked"),
             Self::ApiKeyExpired => write!(f, "API key has expired"),
+            Self::InvalidFilterPreset(msg) => write!(f, "Invalid filter preset: {}", msg),
+            Self::FilterPresetNotFound => write!(f, "Filter preset not found"),
+            Self::FilterPresetNameExists => write!(f, "A filter preset with this name already exists"),
             Self::InsufficientPermissions => write!(f, "Insufficient permissions for this action"),
             Self::NotOrgMember => write!(f, "User is not a member of this organization"),
             Self::InternalError(msg) => write!(f, "Internal error: {}", msg),

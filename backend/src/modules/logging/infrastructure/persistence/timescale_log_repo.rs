@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::models::{LevelCountRow, LogRow, LogStatsRow};
 use crate::modules::logging::domain::{
     LogDomainError, LogEntry, LogFilters, LogId, LogLevel, LogQueryResult, LogRepository,
-    LogStats, Pagination, SortOrder, SpanId, TraceId,
+    LogStats, MetadataFilter, MetadataOperator, Pagination, SortOrder, SpanId, TraceId,
 };
 use crate::modules::projects::domain::ProjectId;
 
@@ -41,9 +41,9 @@ impl TimescaleLogRepository {
     }
 
     /// Build WHERE clause from filters
-    fn build_filter_clause(filters: &LogFilters, param_offset: usize) -> (String, Vec<String>) {
+    /// Returns the SQL clause and the count of parameters used for binding
+    fn build_filter_clause(filters: &LogFilters, param_offset: usize) -> (String, usize) {
         let mut conditions = Vec::new();
-        let mut params = Vec::new();
         let mut idx = param_offset;
 
         if let Some(ref levels) = filters.levels {
@@ -51,38 +51,38 @@ impl TimescaleLogRepository {
                 let placeholders: Vec<String> =
                     levels.iter().map(|_| format!("${}", { idx += 1; idx })).collect();
                 conditions.push(format!("level IN ({})", placeholders.join(", ")));
-                params.extend(levels.iter().map(|l| l.as_str().to_string()));
             }
         }
 
-        if let Some(ref start_time) = filters.start_time {
+        if filters.start_time.is_some() {
             idx += 1;
             conditions.push(format!("timestamp >= ${}", idx));
-            params.push(start_time.to_rfc3339());
         }
 
-        if let Some(ref end_time) = filters.end_time {
+        if filters.end_time.is_some() {
             idx += 1;
             conditions.push(format!("timestamp <= ${}", idx));
-            params.push(end_time.to_rfc3339());
         }
 
-        if let Some(ref source) = filters.source {
+        if filters.source.is_some() {
             idx += 1;
             conditions.push(format!("source = ${}", idx));
-            params.push(source.clone());
         }
 
-        if let Some(ref search) = filters.search {
+        if filters.search.is_some() {
             idx += 1;
             conditions.push(format!("message ILIKE ${}", idx));
-            params.push(format!("%{}%", search));
         }
 
-        if let Some(ref trace_id) = filters.trace_id {
+        if filters.trace_id.is_some() {
             idx += 1;
             conditions.push(format!("trace_id = ${}", idx));
-            params.push(trace_id.clone());
+        }
+
+        // Add metadata filter conditions
+        for filter in &filters.metadata_filters {
+            let metadata_condition = Self::build_metadata_condition(filter, &mut idx);
+            conditions.push(metadata_condition);
         }
 
         let clause = if conditions.is_empty() {
@@ -91,7 +91,151 @@ impl TimescaleLogRepository {
             format!(" AND {}", conditions.join(" AND "))
         };
 
-        (clause, params)
+        (clause, idx - param_offset)
+    }
+
+    /// Build SQL condition for a single metadata filter
+    fn build_metadata_condition(filter: &MetadataFilter, idx: &mut usize) -> String {
+        let key_path = Self::build_jsonb_path(&filter.key);
+
+        match filter.operator {
+            MetadataOperator::Exists => {
+                // Check if key exists in JSONB
+                format!("metadata ? '{}'", filter.key.replace('\'', "''"))
+            }
+            MetadataOperator::Eq => {
+                *idx += 1;
+                // Exact match using @> containment
+                format!("metadata @> jsonb_build_object('{}', ${}::jsonb)",
+                    filter.key.replace('\'', "''"), *idx)
+            }
+            MetadataOperator::Neq => {
+                *idx += 1;
+                // Not equal
+                format!("NOT (metadata @> jsonb_build_object('{}', ${}::jsonb))",
+                    filter.key.replace('\'', "''"), *idx)
+            }
+            MetadataOperator::Contains => {
+                *idx += 1;
+                // String contains (case-insensitive)
+                format!("({} IS NOT NULL AND {}::text ILIKE ${})",
+                    key_path, key_path, *idx)
+            }
+            MetadataOperator::Gt => {
+                *idx += 1;
+                // Greater than (numeric comparison)
+                format!("({}::numeric > ${}::numeric)", key_path, *idx)
+            }
+            MetadataOperator::Lt => {
+                *idx += 1;
+                // Less than (numeric comparison)
+                format!("({}::numeric < ${}::numeric)", key_path, *idx)
+            }
+            MetadataOperator::Gte => {
+                *idx += 1;
+                // Greater than or equal (numeric comparison)
+                format!("({}::numeric >= ${}::numeric)", key_path, *idx)
+            }
+            MetadataOperator::Lte => {
+                *idx += 1;
+                // Less than or equal (numeric comparison)
+                format!("({}::numeric <= ${}::numeric)", key_path, *idx)
+            }
+        }
+    }
+
+    /// Build JSONB path accessor for nested keys (e.g., "request.path" -> metadata->'request'->'path')
+    fn build_jsonb_path(key: &str) -> String {
+        let parts: Vec<&str> = key.split('.').collect();
+        if parts.len() == 1 {
+            format!("metadata->'{}'", key.replace('\'', "''"))
+        } else {
+            let mut path = "metadata".to_string();
+            for part in parts.iter() {
+                path.push_str(&format!("->'{}'", part.replace('\'', "''")));
+            }
+            path
+        }
+    }
+
+    /// Bind metadata filter value to query builder
+    fn bind_metadata_filter_value<'q, O>(
+        query_builder: sqlx::query::QueryAs<'q, sqlx::Postgres, O, sqlx::postgres::PgArguments>,
+        filter: &'q MetadataFilter,
+    ) -> sqlx::query::QueryAs<'q, sqlx::Postgres, O, sqlx::postgres::PgArguments> {
+        match filter.operator {
+            MetadataOperator::Exists => {
+                // No value needed for exists operator
+                query_builder
+            }
+            MetadataOperator::Eq | MetadataOperator::Neq => {
+                // Bind the JSON value as text for JSONB comparison
+                if let Some(ref value) = filter.value {
+                    query_builder.bind(value.to_string())
+                } else {
+                    query_builder
+                }
+            }
+            MetadataOperator::Contains => {
+                // Bind as ILIKE pattern
+                if let Some(ref value) = filter.value {
+                    let pattern = format!("%{}%", value.as_str().unwrap_or(&value.to_string()));
+                    query_builder.bind(pattern)
+                } else {
+                    query_builder
+                }
+            }
+            MetadataOperator::Gt | MetadataOperator::Lt | MetadataOperator::Gte | MetadataOperator::Lte => {
+                // Bind numeric value as string for casting
+                if let Some(ref value) = filter.value {
+                    let num_str = match value {
+                        serde_json::Value::Number(n) => n.to_string(),
+                        _ => value.to_string().trim_matches('"').to_string(),
+                    };
+                    query_builder.bind(num_str)
+                } else {
+                    query_builder
+                }
+            }
+        }
+    }
+
+    /// Bind metadata filter value to scalar query builder
+    fn bind_metadata_filter_value_scalar<'q>(
+        query_builder: sqlx::query::QueryScalar<'q, sqlx::Postgres, i64, sqlx::postgres::PgArguments>,
+        filter: &'q MetadataFilter,
+    ) -> sqlx::query::QueryScalar<'q, sqlx::Postgres, i64, sqlx::postgres::PgArguments> {
+        match filter.operator {
+            MetadataOperator::Exists => {
+                query_builder
+            }
+            MetadataOperator::Eq | MetadataOperator::Neq => {
+                if let Some(ref value) = filter.value {
+                    query_builder.bind(value.to_string())
+                } else {
+                    query_builder
+                }
+            }
+            MetadataOperator::Contains => {
+                if let Some(ref value) = filter.value {
+                    let pattern = format!("%{}%", value.as_str().unwrap_or(&value.to_string()));
+                    query_builder.bind(pattern)
+                } else {
+                    query_builder
+                }
+            }
+            MetadataOperator::Gt | MetadataOperator::Lt | MetadataOperator::Gte | MetadataOperator::Lte => {
+                if let Some(ref value) = filter.value {
+                    let num_str = match value {
+                        serde_json::Value::Number(n) => n.to_string(),
+                        _ => value.to_string().trim_matches('"').to_string(),
+                    };
+                    query_builder.bind(num_str)
+                } else {
+                    query_builder
+                }
+            }
+        }
     }
 }
 
@@ -157,7 +301,7 @@ impl LogRepository for TimescaleLogRepository {
             SortOrder::Descending => "DESC",
         };
 
-        let (filter_clause, filter_params) = Self::build_filter_clause(filters, 1);
+        let (filter_clause, _param_count) = Self::build_filter_clause(filters, 1);
 
         // Build query with dynamic filters
         let query = format!(
@@ -176,7 +320,6 @@ impl LogRepository for TimescaleLogRepository {
         let mut query_builder = sqlx::query_as::<_, LogRow>(&query).bind(project_id.as_str());
 
         // Bind filter params dynamically based on filter types
-        // Note: This is a simplified version - in production you might use a query builder
         if let Some(ref levels) = filters.levels {
             for level in levels {
                 query_builder = query_builder.bind(level.as_str());
@@ -196,6 +339,11 @@ impl LogRepository for TimescaleLogRepository {
         }
         if let Some(ref trace_id) = filters.trace_id {
             query_builder = query_builder.bind(trace_id);
+        }
+
+        // Bind metadata filter values
+        for filter in &filters.metadata_filters {
+            query_builder = Self::bind_metadata_filter_value(query_builder, filter);
         }
 
         let rows: Vec<LogRow> = query_builder
@@ -253,6 +401,11 @@ impl LogRepository for TimescaleLogRepository {
         }
         if let Some(ref trace_id) = filters.trace_id {
             query_builder = query_builder.bind(trace_id);
+        }
+
+        // Bind metadata filter values
+        for filter in &filters.metadata_filters {
+            query_builder = Self::bind_metadata_filter_value_scalar(query_builder, filter);
         }
 
         let count = query_builder

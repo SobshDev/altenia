@@ -1,17 +1,18 @@
 use axum::{
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use std::sync::Arc;
 
+use super::filter_preset_handlers;
 use super::handlers;
 use super::middleware::api_key_middleware;
 use super::sse;
 use crate::modules::auth::application::ports::{IdGenerator, TokenService};
 use crate::modules::auth::infrastructure::http::middleware::auth_middleware;
-use crate::modules::logging::application::services::LogService;
-use crate::modules::logging::domain::LogRepository;
+use crate::modules::logging::application::services::{FilterPresetService, LogService};
+use crate::modules::logging::domain::{FilterPresetRepository, LogRepository};
 use crate::modules::logging::infrastructure::broadcast::LogBroadcaster;
 use crate::modules::organizations::domain::{OrganizationMemberRepository, OrganizationRepository};
 use crate::modules::projects::application::services::ProjectService;
@@ -93,4 +94,39 @@ where
             auth_middleware::<TS>,
         ))
         .with_state((broadcaster, project_repo, member_repo))
+}
+
+/// Create filter preset routes (JWT auth)
+pub fn filter_preset_routes<FPR, PR, MR, ID, TS>(
+    filter_preset_service: Arc<FilterPresetService<FPR, PR, MR, ID>>,
+    token_service: Arc<TS>,
+) -> Router
+where
+    FPR: FilterPresetRepository + 'static,
+    PR: ProjectRepository + 'static,
+    MR: OrganizationMemberRepository + 'static,
+    ID: IdGenerator + 'static,
+    TS: TokenService + 'static,
+{
+    Router::new()
+        .route(
+            "/projects/{id}/filter-presets",
+            post(filter_preset_handlers::create_preset::<FPR, PR, MR, ID>)
+                .get(filter_preset_handlers::list_presets::<FPR, PR, MR, ID>),
+        )
+        .route(
+            "/projects/{id}/filter-presets/default",
+            get(filter_preset_handlers::get_default_preset::<FPR, PR, MR, ID>),
+        )
+        .route(
+            "/projects/{project_id}/filter-presets/{preset_id}",
+            get(filter_preset_handlers::get_preset::<FPR, PR, MR, ID>)
+                .put(filter_preset_handlers::update_preset::<FPR, PR, MR, ID>)
+                .delete(filter_preset_handlers::delete_preset::<FPR, PR, MR, ID>),
+        )
+        .layer(middleware::from_fn_with_state(
+            token_service,
+            auth_middleware::<TS>,
+        ))
+        .with_state(filter_preset_service)
 }

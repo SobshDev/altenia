@@ -43,6 +43,21 @@ pub struct QueryFilters {
     pub search: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
+    /// Metadata field filters (JSON array of {key, operator, value})
+    #[serde(default)]
+    pub metadata_filters: Option<Vec<MetadataFilterInput>>,
+    /// Apply a saved filter preset by ID
+    #[serde(default)]
+    pub preset_id: Option<String>,
+}
+
+/// Metadata filter input for query (simplified version for query params)
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetadataFilterInput {
+    pub key: String,
+    pub operator: String,
+    #[serde(default)]
+    pub value: Option<Value>,
 }
 
 /// Command to query logs
@@ -109,4 +124,95 @@ pub struct LogStatsResponse {
     pub oldest_log: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub newest_log: Option<DateTime<Utc>>,
+}
+
+// ==================== Filter Preset DTOs ====================
+
+/// Metadata filter DTO for HTTP layer
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetadataFilterDto {
+    /// The metadata key to filter on (e.g., "user_id", "request.path")
+    pub key: String,
+    /// The comparison operator: eq, neq, contains, exists, gt, lt, gte, lte
+    pub operator: String,
+    /// The value to compare against (None for exists operator)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<Value>,
+}
+
+/// Filter configuration DTO for HTTP layer
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FilterConfigDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub levels: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metadata_filters: Vec<MetadataFilterDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<String>,
+}
+
+/// Command to create a filter preset
+#[derive(Debug, Clone)]
+pub struct CreateFilterPresetCommand {
+    pub project_id: String,
+    pub name: String,
+    pub filter_config: FilterConfigDto,
+    pub is_default: bool,
+    pub requesting_user_id: String,
+}
+
+/// Command to update a filter preset
+#[derive(Debug, Clone)]
+pub struct UpdateFilterPresetCommand {
+    pub preset_id: String,
+    pub project_id: String,
+    pub name: Option<String>,
+    pub filter_config: Option<FilterConfigDto>,
+    pub is_default: Option<bool>,
+    pub requesting_user_id: String,
+}
+
+/// Command to delete a filter preset
+#[derive(Debug, Clone)]
+pub struct DeleteFilterPresetCommand {
+    pub preset_id: String,
+    pub project_id: String,
+    pub requesting_user_id: String,
+}
+
+/// Command to get a filter preset
+#[derive(Debug, Clone)]
+pub struct GetFilterPresetCommand {
+    pub preset_id: String,
+    pub project_id: String,
+    pub requesting_user_id: String,
+}
+
+/// Command to list filter presets
+#[derive(Debug, Clone)]
+pub struct ListFilterPresetsCommand {
+    pub project_id: String,
+    pub requesting_user_id: String,
+}
+
+/// Filter preset response
+#[derive(Debug, Clone, Serialize)]
+pub struct FilterPresetResponse {
+    pub id: String,
+    pub project_id: String,
+    pub name: String,
+    pub filter_config: FilterConfigDto,
+    pub is_default: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }

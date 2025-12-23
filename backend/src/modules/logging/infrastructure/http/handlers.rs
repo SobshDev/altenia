@@ -65,6 +65,9 @@ pub struct LogQueryParams {
     pub offset: Option<i64>,
     #[serde(default)]
     pub sort: Option<String>,
+    /// JSON-encoded array of metadata filters: [{"key":"x","operator":"eq","value":"y"}]
+    #[serde(default)]
+    pub metadata_filters: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -238,6 +241,27 @@ fn to_error_response(e: LogDomainError) -> (StatusCode, Json<ErrorResponse>) {
                 code: "UNAUTHORIZED".to_string(),
             }),
         ),
+        LogDomainError::InvalidFilterPreset(msg) => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: msg,
+                code: "INVALID_FILTER_PRESET".to_string(),
+            }),
+        ),
+        LogDomainError::FilterPresetNotFound => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Filter preset not found".to_string(),
+                code: "FILTER_PRESET_NOT_FOUND".to_string(),
+            }),
+        ),
+        LogDomainError::FilterPresetNameExists => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "A filter preset with this name already exists".to_string(),
+                code: "FILTER_PRESET_NAME_EXISTS".to_string(),
+            }),
+        ),
         LogDomainError::InternalError(ref msg) => {
             tracing::error!(error = %msg, "Internal error occurred");
             (
@@ -304,6 +328,19 @@ where
             .collect()
     });
 
+    // Parse JSON-encoded metadata filters
+    let metadata_filters = params
+        .metadata_filters
+        .map(|json_str| {
+            serde_json::from_str::<Vec<MetadataFilterInput>>(&json_str)
+                .map_err(|e| LogDomainError::InvalidFilterPreset(format!(
+                    "Invalid metadata_filters JSON: {}",
+                    e
+                )))
+        })
+        .transpose()
+        .map_err(to_error_response)?;
+
     let filters = QueryFilters {
         levels,
         start_time: params.start_time,
@@ -311,6 +348,8 @@ where
         source: params.source,
         search: params.search,
         trace_id: params.trace_id,
+        metadata_filters,
+        preset_id: None,
     };
 
     let cmd = QueryLogsCommand {

@@ -27,10 +27,10 @@ use crate::modules::projects::{
     infrastructure::{project_routes, PostgresApiKeyRepository, PostgresProjectRepository},
 };
 use crate::modules::logging::{
-    application::LogService,
+    application::services::{FilterPresetService, LogService},
     infrastructure::{
-        ingest_routes, log_query_routes, sse_routes, start_cleanup_task, start_log_listener,
-        LogBroadcaster, TimescaleLogRepository,
+        filter_preset_routes, ingest_routes, log_query_routes, sse_routes, start_cleanup_task,
+        start_log_listener, LogBroadcaster, PostgresFilterPresetRepository, TimescaleLogRepository,
     },
 };
 
@@ -135,6 +135,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log_repo,
         project_repo.clone(),
         member_repo.clone(),
+        id_generator.clone(),
+    ));
+
+    // Create filter preset repository and service
+    let filter_preset_repo = Arc::new(PostgresFilterPresetRepository::new(pool.clone()));
+    let filter_preset_service = Arc::new(FilterPresetService::new(
+        filter_preset_repo,
+        project_repo.clone(),
+        member_repo.clone(),
         id_generator,
     ));
 
@@ -184,9 +193,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api", sse_routes(
             log_broadcaster,
             project_repo,
-            member_repo,
-            token_service,
+            member_repo.clone(),
+            token_service.clone(),
         ))
+        // Filter preset routes
+        .nest("/api", filter_preset_routes(filter_preset_service, token_service))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

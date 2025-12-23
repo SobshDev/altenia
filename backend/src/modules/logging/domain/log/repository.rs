@@ -1,9 +1,11 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use super::entity::LogEntry;
 use super::value_objects::LogLevel;
 use crate::modules::logging::domain::errors::LogDomainError;
+use crate::modules::logging::domain::filter_preset::MetadataFilter;
 use crate::modules::projects::domain::ProjectId;
 
 /// Query filters for logs
@@ -15,6 +17,8 @@ pub struct LogFilters {
     pub source: Option<String>,
     pub search: Option<String>,
     pub trace_id: Option<String>,
+    /// Metadata field filters (JSONB queries)
+    pub metadata_filters: Vec<MetadataFilter>,
 }
 
 /// Pagination options
@@ -34,7 +38,8 @@ impl Default for Pagination {
 }
 
 /// Sort order
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum SortOrder {
     Ascending,
     Descending,
@@ -43,6 +48,15 @@ pub enum SortOrder {
 impl Default for SortOrder {
     fn default() -> Self {
         Self::Descending
+    }
+}
+
+impl SortOrder {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "asc" | "ascending" => Self::Ascending,
+            _ => Self::Descending,
+        }
     }
 }
 
