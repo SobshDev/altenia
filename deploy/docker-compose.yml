@@ -26,6 +26,8 @@ services:
       dockerfile: Dockerfile
     container_name: altenia-backend
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-altenia}:${POSTGRES_PASSWORD:-altenia_dev_password}@postgres:5432/${POSTGRES_DB:-altenia}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production-32chars}
