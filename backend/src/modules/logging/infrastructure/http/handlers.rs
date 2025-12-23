@@ -1,6 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
+    response::IntoResponse,
     Extension, Json,
 };
 use chrono::{DateTime, Utc};
@@ -385,4 +386,96 @@ where
         .await
         .map(|r| Json(r.into()))
         .map_err(to_error_response)
+}
+
+/// Query parameters for metrics
+#[derive(Debug, Deserialize)]
+pub struct MetricsQueryParams {
+    /// Time bucket granularity: minute, hour, day (default: hour)
+    #[serde(default)]
+    pub bucket: TimeBucket,
+    /// Start time for metrics range
+    #[serde(default)]
+    pub start_time: Option<DateTime<Utc>>,
+    /// End time for metrics range
+    #[serde(default)]
+    pub end_time: Option<DateTime<Utc>>,
+    /// Limit for top sources (default: 10)
+    #[serde(default = "default_top_sources_limit")]
+    pub top_sources_limit: i32,
+}
+
+fn default_top_sources_limit() -> i32 {
+    10
+}
+
+/// Get metrics for dashboard charts
+pub async fn get_metrics<LR, PR, MR, ID>(
+    State(service): State<Arc<LogService<LR, PR, MR, ID>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Path(project_id): Path<String>,
+    Query(params): Query<MetricsQueryParams>,
+) -> Result<Json<MetricsResponse>, (StatusCode, Json<ErrorResponse>)>
+where
+    LR: crate::modules::logging::domain::LogRepository,
+    PR: ProjectRepository,
+    MR: OrganizationMemberRepository,
+    ID: IdGenerator,
+{
+    let query = MetricsQuery {
+        project_id,
+        bucket: params.bucket,
+        start_time: params.start_time,
+        end_time: params.end_time,
+        top_sources_limit: params.top_sources_limit,
+        requesting_user_id: claims.user_id,
+    };
+
+    service
+        .get_metrics(query)
+        .await
+        .map(Json)
+        .map_err(to_error_response)
+}
+
+/// Export logs to a ZIP file
+pub async fn export_logs<LR, PR, MR, ID>(
+    State(service): State<Arc<LogService<LR, PR, MR, ID>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Path(project_id): Path<String>,
+    Json(request): Json<ExportLogsRequest>,
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)>
+where
+    LR: crate::modules::logging::domain::LogRepository,
+    PR: ProjectRepository,
+    MR: OrganizationMemberRepository,
+    ID: IdGenerator,
+{
+    let bytes = service
+        .export_logs(&project_id, request, &claims.user_id)
+        .await
+        .map_err(to_error_response)?;
+
+    // Generate filename with timestamp
+    let filename = format!(
+        "logs-export-{}-{}.zip",
+        project_id,
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    );
+    let content_disposition = format!("attachment; filename=\"{}\"", filename);
+
+    Ok((
+        StatusCode::OK,
+        [
+            (
+                header::CONTENT_TYPE,
+                header::HeaderValue::from_static("application/zip"),
+            ),
+            (
+                header::CONTENT_DISPOSITION,
+                header::HeaderValue::from_str(&content_disposition).unwrap(),
+            ),
+        ],
+        bytes,
+    ))
 }

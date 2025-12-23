@@ -1,9 +1,19 @@
+pub mod alerts;
 pub mod auth;
 pub mod logging;
+pub mod metrics;
 pub mod organizations;
+pub mod otlp;
 pub mod projects;
+pub mod retention;
+pub mod traces;
 
+pub use alerts::*;
 pub use auth::*;
 pub use logging::*;
+pub use metrics::*;
 pub use organizations::*;
+pub use otlp::*;
 pub use projects::*;
+pub use retention::*;
+pub use traces::*;

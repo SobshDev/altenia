@@ -65,6 +65,14 @@ where
             "/projects/{id}/logs/stats",
             get(handlers::get_log_stats::<LR, PR, MR, ID>),
         )
+        .route(
+            "/projects/{id}/logs/export",
+            post(handlers::export_logs::<LR, PR, MR, ID>),
+        )
+        .route(
+            "/projects/{id}/metrics",
+            get(handlers::get_metrics::<LR, PR, MR, ID>),
+        )
         .layer(middleware::from_fn_with_state(
             token_service,
             auth_middleware::<TS>,

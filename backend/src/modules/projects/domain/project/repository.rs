@@ -31,4 +31,7 @@ pub trait ProjectRepository: Send + Sync {
         org_id: &OrgId,
         exclude_id: &ProjectId,
     ) -> Result<bool, ProjectDomainError>;
+
+    /// Find all active (non-deleted) projects
+    async fn find_all_active(&self) -> Result<Vec<Project>, ProjectDomainError>;
 }

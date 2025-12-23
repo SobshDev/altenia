@@ -23,6 +23,8 @@ pub struct CreateProjectRequest {
     pub name: String,
     pub description: Option<String>,
     pub retention_days: Option<i32>,
+    pub metrics_retention_days: Option<i32>,
+    pub traces_retention_days: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +32,8 @@ pub struct UpdateProjectRequest {
     pub name: Option<String>,
     pub description: Option<Option<String>>,
     pub retention_days: Option<i32>,
+    pub metrics_retention_days: Option<i32>,
+    pub traces_retention_days: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +49,8 @@ pub struct ProjectResponseDto {
     pub description: Option<String>,
     pub org_id: String,
     pub retention_days: i32,
+    pub metrics_retention_days: i32,
+    pub traces_retention_days: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -83,6 +89,8 @@ impl From<ProjectResponse> for ProjectResponseDto {
             description: r.description,
             org_id: r.org_id,
             retention_days: r.retention_days,
+            metrics_retention_days: r.metrics_retention_days,
+            traces_retention_days: r.traces_retention_days,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -229,6 +237,8 @@ where
         name: req.name,
         description: req.description,
         retention_days: req.retention_days,
+        metrics_retention_days: req.metrics_retention_days,
+        traces_retention_days: req.traces_retention_days,
         requesting_user_id: claims.user_id,
     };
 
@@ -298,6 +308,8 @@ where
         name: req.name,
         description: req.description,
         retention_days: req.retention_days,
+        metrics_retention_days: req.metrics_retention_days,
+        traces_retention_days: req.traces_retention_days,
         requesting_user_id: claims.user_id,
     };
 

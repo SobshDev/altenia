@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use super::models::{LevelCountRow, LogRow, LogStatsRow};
+use super::models::{LevelBucketRow, LevelCountRow, LogRow, LogStatsRow, SourceCountRow, TimeBucketRow};
 use crate::modules::logging::domain::{
     LogDomainError, LogEntry, LogFilters, LogId, LogLevel, LogQueryResult, LogRepository,
     LogStats, MetadataFilter, MetadataOperator, Pagination, SortOrder, SpanId, TraceId,
@@ -483,5 +483,109 @@ impl LogRepository for TimescaleLogRepository {
         .map_err(|e| LogDomainError::InternalError(e.to_string()))?;
 
         Ok(result.rows_affected())
+    }
+
+    // ==================== Metrics Methods ====================
+
+    async fn get_volume_over_time(
+        &self,
+        project_id: &ProjectId,
+        bucket_interval: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(DateTime<Utc>, i64)>, LogDomainError> {
+        let rows: Vec<TimeBucketRow> = sqlx::query_as(
+            r#"
+            SELECT
+                time_bucket($1::interval, timestamp) AS bucket,
+                COUNT(*) AS count
+            FROM logs
+            WHERE project_id = $2
+              AND ($3::timestamptz IS NULL OR timestamp >= $3)
+              AND ($4::timestamptz IS NULL OR timestamp <= $4)
+            GROUP BY bucket
+            ORDER BY bucket ASC
+            "#,
+        )
+        .bind(bucket_interval)
+        .bind(project_id.as_str())
+        .bind(start_time)
+        .bind(end_time)
+        .fetch_all(self.pool.as_ref())
+        .await
+        .map_err(|e| LogDomainError::InternalError(e.to_string()))?;
+
+        Ok(rows.into_iter().map(|r| (r.bucket, r.count)).collect())
+    }
+
+    async fn get_levels_over_time(
+        &self,
+        project_id: &ProjectId,
+        bucket_interval: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(String, DateTime<Utc>, i64)>, LogDomainError> {
+        let rows: Vec<LevelBucketRow> = sqlx::query_as(
+            r#"
+            SELECT
+                level,
+                time_bucket($1::interval, timestamp) AS bucket,
+                COUNT(*) AS count
+            FROM logs
+            WHERE project_id = $2
+              AND ($3::timestamptz IS NULL OR timestamp >= $3)
+              AND ($4::timestamptz IS NULL OR timestamp <= $4)
+            GROUP BY level, bucket
+            ORDER BY bucket ASC, level ASC
+            "#,
+        )
+        .bind(bucket_interval)
+        .bind(project_id.as_str())
+        .bind(start_time)
+        .bind(end_time)
+        .fetch_all(self.pool.as_ref())
+        .await
+        .map_err(|e| LogDomainError::InternalError(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.level, r.bucket, r.count))
+            .collect())
+    }
+
+    async fn get_top_sources(
+        &self,
+        project_id: &ProjectId,
+        limit: i32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(String, i64, i64)>, LogDomainError> {
+        let rows: Vec<SourceCountRow> = sqlx::query_as(
+            r#"
+            SELECT
+                COALESCE(source, 'unknown') AS source,
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE level IN ('error', 'fatal')) AS error_count
+            FROM logs
+            WHERE project_id = $1
+              AND ($2::timestamptz IS NULL OR timestamp >= $2)
+              AND ($3::timestamptz IS NULL OR timestamp <= $3)
+            GROUP BY source
+            ORDER BY total DESC
+            LIMIT $4
+            "#,
+        )
+        .bind(project_id.as_str())
+        .bind(start_time)
+        .bind(end_time)
+        .bind(limit)
+        .fetch_all(self.pool.as_ref())
+        .await
+        .map_err(|e| LogDomainError::InternalError(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.source, r.total, r.error_count))
+            .collect())
     }
 }

@@ -1,0 +1,332 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   COLOR PALETTE
+
+   Semantic color tokens that automatically switch between light and dark modes.
+   All colors are defined here - components should only use these tokens.
+   ============================================================================= */
+
+:root {
+  /* Background colors */
+  --background: #ffffff;
+  --background-alt: #f8fafc;           /* slate-50 */
+  --surface: #ffffff;
+  --surface-alt: #f1f5f9;              /* slate-100 */
+
+  /* Foreground/text colors */
+  --foreground: #0f172a;               /* slate-900 */
+  --foreground-muted: #475569;         /* slate-600 */
+  --foreground-subtle: #94a3b8;        /* slate-400 */
+
+  /* Border colors */
+  --border: #e2e8f0;                   /* slate-200 */
+  --border-muted: #f1f5f9;             /* slate-100 */
+
+  /* Primary brand color (indigo/violet in light, emerald in dark) */
+  --primary: #4f46e5;                  /* indigo-600 */
+  --primary-hover: #6366f1;            /* indigo-500 */
+  --primary-active: #4338ca;           /* indigo-700 */
+  --primary-foreground: #ffffff;
+  --primary-muted: #eef2ff;            /* indigo-50 */
+  --primary-muted-foreground: #4f46e5;
+
+  /* Accent color */
+  --accent: #7c3aed;                   /* violet-600 */
+  --accent-hover: #8b5cf6;             /* violet-500 */
+  --accent-foreground: #ffffff;
+
+  /* Destructive/error */
+  --destructive: #ef4444;              /* red-500 */
+  --destructive-hover: #dc2626;        /* red-600 */
+  --destructive-foreground: #ffffff;
+  --destructive-muted: #fef2f2;        /* red-50 */
+  --destructive-muted-foreground: #991b1b; /* red-800 */
+  --destructive-border: #fecaca;       /* red-200 */
+
+  /* Focus ring */
+  --ring: #6366f1;                     /* indigo-500 */
+  --ring-offset: #ffffff;
+
+  /* Shadows */
+  --shadow-color: 215 28% 17%;         /* slate-900 in hsl for shadow */
+
+  /* Gradient colors for animated background */
+  --gradient-1: #4f46e5;               /* indigo-600 */
+  --gradient-2: #7c3aed;               /* violet-600 */
+  --gradient-3: #a855f7;               /* purple-500 */
+
+  /* Grid pattern color */
+  --grid-color: 99, 102, 241;          /* indigo RGB */
+  --grid-opacity: 0.03;
+
+  /* Glow color */
+  --glow-color: 99, 102, 241;          /* indigo RGB */
+  --glow-opacity: 0.3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Background colors */
+    --background: #18181b;             /* zinc-900 */
+    --background-alt: #18181b;         /* zinc-900 */
+    --surface: #1f1f23;                /* between zinc-900 and zinc-800 */
+    --surface-alt: #27272a;            /* zinc-800 */
+
+    /* Foreground/text colors */
+    --foreground: #fafafa;             /* zinc-50 */
+    --foreground-muted: #a1a1aa;       /* zinc-400 */
+    --foreground-subtle: #71717a;      /* zinc-500 */
+
+    /* Border colors */
+    --border: #3f3f46;                 /* zinc-700 */
+    --border-muted: #27272a;           /* zinc-800 */
+
+    /* Primary brand color (emerald in dark mode) */
+    --primary: #10b981;                /* emerald-500 */
+    --primary-hover: #34d399;          /* emerald-400 */
+    --primary-active: #059669;         /* emerald-600 */
+    --primary-foreground: #ffffff;
+    --primary-muted: #022c22;          /* emerald-950 */
+    --primary-muted-foreground: #34d399;
+
+    /* Accent color */
+    --accent: #14b8a6;                 /* teal-500 */
+    --accent-hover: #2dd4bf;           /* teal-400 */
+    --accent-foreground: #ffffff;
+
+    /* Destructive/error */
+    --destructive: #f87171;            /* red-400 */
+    --destructive-hover: #ef4444;      /* red-500 */
+    --destructive-foreground: #ffffff;
+    --destructive-muted: #450a0a;      /* red-950 */
+    --destructive-muted-foreground: #fca5a5; /* red-300 */
+    --destructive-border: #7f1d1d;     /* red-900 */
+
+    /* Focus ring */
+    --ring: #34d399;                   /* emerald-400 */
+    --ring-offset: #18181b;            /* zinc-900 */
+
+    /* Shadows */
+    --shadow-color: 0 0% 0%;           /* black in hsl for shadow */
+
+    /* Gradient colors for animated background */
+    --gradient-1: #0f172a;             /* slate-900 */
+    --gradient-2: #1e293b;             /* slate-800 */
+    --gradient-3: #134e4a;             /* teal-900 */
+
+    /* Grid pattern color */
+    --grid-color: 16, 185, 129;        /* emerald RGB */
+    --grid-opacity: 0.08;
+
+    /* Glow color */
+    --glow-color: 16, 185, 129;        /* emerald RGB */
+    --glow-opacity: 0.5;
+  }
+}
+
+/* =============================================================================
+   TAILWIND THEME EXTENSION
+   ============================================================================= */
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Map CSS variables to Tailwind colors */
+  --color-background: var(--background);
+  --color-background-alt: var(--background-alt);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+
+  --color-border: var(--border);
+  --color-border-muted: var(--border-muted);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-muted: var(--primary-muted);
+  --color-primary-muted-foreground: var(--primary-muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-muted: var(--destructive-muted);
+  --color-destructive-muted-foreground: var(--destructive-muted-foreground);
+  --color-destructive-border: var(--destructive-border);
+
+  --color-ring: var(--ring);
+  --color-ring-offset: var(--ring-offset);
+}
+
+/* =============================================================================
+   BASE STYLES
+   ============================================================================= */
+
+body {
+  @apply min-h-screen antialiased;
+  @apply bg-background text-foreground;
+}
+
+/* =============================================================================
+   COMPONENT STYLES
+   ============================================================================= */
+
+/* Animated gradient background */
+.gradient-bg {
+  background: linear-gradient(-45deg, var(--gradient-1), var(--gradient-2), var(--gradient-3), var(--gradient-1));
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Floating animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* =============================================================================
+   PAGE TRANSITION ANIMATIONS
+   ============================================================================= */
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes fade-in-scale {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes text-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) skewY(2deg);
+    filter: blur(8px);
+  }
+  60% {
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) skewY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes slide-in-right {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Animation classes with stagger support via CSS custom property */
+.animate-fade-in-up {
+  animation: fade-in-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--stagger, 0ms);
+  opacity: 0;
+}
+
+.animate-fade-in-scale {
+  animation: fade-in-scale 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--stagger, 0ms);
+  opacity: 0;
+}
+
+.animate-text-reveal {
+  animation: text-reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--stagger, 0ms);
+  opacity: 0;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--stagger, 0ms);
+  opacity: 0;
+}
+
+/* Subtle grid pattern */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(var(--grid-color), var(--grid-opacity)) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--grid-color), var(--grid-opacity)) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Glow effects */
+.glow {
+  box-shadow: 0 0 60px -15px rgba(var(--glow-color), var(--glow-opacity));
+}
+
+/* Glass morphism card */
+.glass-card {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  backdrop-filter: blur(24px);
+  border: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+}
+
+/* Focus ring utility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-ring-offset;
+}
+
+/* =============================================================================
+   SCROLLBAR
+   ============================================================================= */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-subtle);
+}

@@ -9,6 +9,8 @@ pub struct ProjectRow {
     pub name: String,
     pub description: Option<String>,
     pub retention_days: i32,
+    pub metrics_retention_days: i32,
+    pub traces_retention_days: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,

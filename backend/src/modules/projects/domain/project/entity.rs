@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use super::value_objects::{ProjectId, ProjectName, RetentionDays};
+use super::value_objects::{MetricsRetentionDays, ProjectId, ProjectName, RetentionDays, TracesRetentionDays};
 use crate::modules::organizations::domain::OrgId;
 use crate::modules::projects::domain::errors::ProjectDomainError;
 
@@ -12,6 +12,8 @@ pub struct Project {
     name: ProjectName,
     description: Option<String>,
     retention_days: RetentionDays,
+    metrics_retention_days: MetricsRetentionDays,
+    traces_retention_days: TracesRetentionDays,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     deleted_at: Option<DateTime<Utc>>,
@@ -25,6 +27,8 @@ impl Project {
         name: ProjectName,
         description: Option<String>,
         retention_days: RetentionDays,
+        metrics_retention_days: MetricsRetentionDays,
+        traces_retention_days: TracesRetentionDays,
     ) -> Self {
         let now = Utc::now();
         Self {
@@ -33,6 +37,8 @@ impl Project {
             name,
             description,
             retention_days,
+            metrics_retention_days,
+            traces_retention_days,
             created_at: now,
             updated_at: now,
             deleted_at: None,
@@ -40,12 +46,15 @@ impl Project {
     }
 
     /// Reconstruct from persistence layer
+    #[allow(clippy::too_many_arguments)]
     pub fn reconstruct(
         id: ProjectId,
         organization_id: OrgId,
         name: ProjectName,
         description: Option<String>,
         retention_days: RetentionDays,
+        metrics_retention_days: MetricsRetentionDays,
+        traces_retention_days: TracesRetentionDays,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
         deleted_at: Option<DateTime<Utc>>,
@@ -56,6 +65,8 @@ impl Project {
             name,
             description,
             retention_days,
+            metrics_retention_days,
+            traces_retention_days,
             created_at,
             updated_at,
             deleted_at,
@@ -83,6 +94,14 @@ impl Project {
         self.retention_days
     }
 
+    pub fn metrics_retention_days(&self) -> MetricsRetentionDays {
+        self.metrics_retention_days
+    }
+
+    pub fn traces_retention_days(&self) -> TracesRetentionDays {
+        self.traces_retention_days
+    }
+
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
@@ -106,6 +125,8 @@ impl Project {
         name: Option<ProjectName>,
         description: Option<Option<String>>,
         retention_days: Option<RetentionDays>,
+        metrics_retention_days: Option<MetricsRetentionDays>,
+        traces_retention_days: Option<TracesRetentionDays>,
     ) {
         if let Some(name) = name {
             self.name = name;
@@ -115,6 +136,12 @@ impl Project {
         }
         if let Some(retention_days) = retention_days {
             self.retention_days = retention_days;
+        }
+        if let Some(metrics_retention_days) = metrics_retention_days {
+            self.metrics_retention_days = metrics_retention_days;
+        }
+        if let Some(traces_retention_days) = traces_retention_days {
+            self.traces_retention_days = traces_retention_days;
         }
         self.updated_at = Utc::now();
     }
@@ -139,7 +166,15 @@ mod tests {
         let id = ProjectId::new("proj-123".to_string());
         let org_id = OrgId::new("org-456".to_string());
         let name = ProjectName::new("Test Project".to_string()).unwrap();
-        Project::new(id, org_id, name, None, RetentionDays::default())
+        Project::new(
+            id,
+            org_id,
+            name,
+            None,
+            RetentionDays::default(),
+            MetricsRetentionDays::default(),
+            TracesRetentionDays::default(),
+        )
     }
 
     #[test]
@@ -148,6 +183,8 @@ mod tests {
         assert!(!project.is_deleted());
         assert_eq!(project.name().as_str(), "Test Project");
         assert_eq!(project.retention_days().value(), 30);
+        assert_eq!(project.metrics_retention_days().value(), 90);
+        assert_eq!(project.traces_retention_days().value(), 14);
         assert!(project.description().is_none());
     }
 
@@ -162,10 +199,14 @@ mod tests {
             name,
             Some("A test project".to_string()),
             RetentionDays::new(90).unwrap(),
+            MetricsRetentionDays::new(60).unwrap(),
+            TracesRetentionDays::new(7).unwrap(),
         );
 
         assert_eq!(project.description(), Some("A test project"));
         assert_eq!(project.retention_days().value(), 90);
+        assert_eq!(project.metrics_retention_days().value(), 60);
+        assert_eq!(project.traces_retention_days().value(), 7);
     }
 
     #[test]
@@ -196,11 +237,15 @@ mod tests {
             Some(new_name),
             Some(Some("New description".to_string())),
             Some(RetentionDays::new(60).unwrap()),
+            Some(MetricsRetentionDays::new(120).unwrap()),
+            Some(TracesRetentionDays::new(30).unwrap()),
         );
 
         assert_eq!(project.name().as_str(), "Updated Project");
         assert_eq!(project.description(), Some("New description"));
         assert_eq!(project.retention_days().value(), 60);
+        assert_eq!(project.metrics_retention_days().value(), 120);
+        assert_eq!(project.traces_retention_days().value(), 30);
         assert!(project.updated_at() >= old_updated_at);
     }
 }

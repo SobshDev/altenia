@@ -5,7 +5,8 @@ use std::sync::Arc;
 use super::models::ProjectRow;
 use crate::modules::organizations::domain::OrgId;
 use crate::modules::projects::domain::{
-    Project, ProjectDomainError, ProjectId, ProjectName, ProjectRepository, RetentionDays,
+    MetricsRetentionDays, Project, ProjectDomainError, ProjectId, ProjectName, ProjectRepository,
+    RetentionDays, TracesRetentionDays,
 };
 
 pub struct PostgresProjectRepository {
@@ -22,6 +23,8 @@ impl PostgresProjectRepository {
         let org_id = OrgId::new(row.organization_id);
         let name = ProjectName::new(row.name)?;
         let retention_days = RetentionDays::new(row.retention_days)?;
+        let metrics_retention_days = MetricsRetentionDays::new(row.metrics_retention_days)?;
+        let traces_retention_days = TracesRetentionDays::new(row.traces_retention_days)?;
 
         Ok(Project::reconstruct(
             id,
@@ -29,6 +32,8 @@ impl PostgresProjectRepository {
             name,
             row.description,
             retention_days,
+            metrics_retention_days,
+            traces_retention_days,
             row.created_at,
             row.updated_at,
             row.deleted_at,
@@ -42,6 +47,7 @@ impl ProjectRepository for PostgresProjectRepository {
         let row: Option<ProjectRow> = sqlx::query_as(
             r#"
             SELECT id, organization_id, name, description, retention_days,
+                   metrics_retention_days, traces_retention_days,
                    created_at, updated_at, deleted_at
             FROM projects
             WHERE id = $1
@@ -59,6 +65,7 @@ impl ProjectRepository for PostgresProjectRepository {
         let rows: Vec<ProjectRow> = sqlx::query_as(
             r#"
             SELECT id, organization_id, name, description, retention_days,
+                   metrics_retention_days, traces_retention_days,
                    created_at, updated_at, deleted_at
             FROM projects
             WHERE organization_id = $1 AND deleted_at IS NULL
@@ -77,12 +84,15 @@ impl ProjectRepository for PostgresProjectRepository {
         sqlx::query(
             r#"
             INSERT INTO projects (id, organization_id, name, description, retention_days,
+                                  metrics_retention_days, traces_retention_days,
                                   created_at, updated_at, deleted_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 description = EXCLUDED.description,
                 retention_days = EXCLUDED.retention_days,
+                metrics_retention_days = EXCLUDED.metrics_retention_days,
+                traces_retention_days = EXCLUDED.traces_retention_days,
                 updated_at = EXCLUDED.updated_at,
                 deleted_at = EXCLUDED.deleted_at
             "#,
@@ -92,6 +102,8 @@ impl ProjectRepository for PostgresProjectRepository {
         .bind(project.name().as_str())
         .bind(project.description())
         .bind(project.retention_days().value())
+        .bind(project.metrics_retention_days().value())
+        .bind(project.traces_retention_days().value())
         .bind(project.created_at())
         .bind(project.updated_at())
         .bind(project.deleted_at())
@@ -143,5 +155,24 @@ impl ProjectRepository for PostgresProjectRepository {
         .map_err(|e| ProjectDomainError::InternalError(e.to_string()))?;
 
         Ok(count.0 > 0)
+    }
+
+    async fn find_all_active(&self) -> Result<Vec<Project>, ProjectDomainError> {
+        let rows: Vec<ProjectRow> = sqlx::query_as(
+            r#"
+            SELECT id, organization_id, name, description, logs_retention_days,
+                   metrics_retention_days, traces_retention_days,
+                   created_at, updated_at, deleted_at
+            FROM projects
+            WHERE deleted_at IS NULL
+            "#,
+        )
+        .fetch_all(self.pool.as_ref())
+        .await
+        .map_err(|e| ProjectDomainError::InternalError(e.to_string()))?;
+
+        rows.into_iter()
+            .map(Self::row_to_project)
+            .collect()
     }
 }

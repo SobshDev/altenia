@@ -44,3 +44,28 @@ pub struct FilterPresetRow {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+// ==================== Metrics Row Types ====================
+
+/// Row for time bucket counts (volume over time)
+#[derive(Debug, FromRow)]
+pub struct TimeBucketRow {
+    pub bucket: DateTime<Utc>,
+    pub count: i64,
+}
+
+/// Row for level time series (level + bucket + count)
+#[derive(Debug, FromRow)]
+pub struct LevelBucketRow {
+    pub level: String,
+    pub bucket: DateTime<Utc>,
+    pub count: i64,
+}
+
+/// Row for top sources with error counts
+#[derive(Debug, FromRow)]
+pub struct SourceCountRow {
+    pub source: String,
+    pub total: i64,
+    pub error_count: i64,
+}

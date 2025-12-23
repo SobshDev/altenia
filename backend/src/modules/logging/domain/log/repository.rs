@@ -108,4 +108,33 @@ pub trait LogRepository: Send + Sync {
         project_id: &ProjectId,
         before: DateTime<Utc>,
     ) -> Result<u64, LogDomainError>;
+
+    // ==================== Metrics Methods ====================
+
+    /// Get log volume over time using time buckets
+    async fn get_volume_over_time(
+        &self,
+        project_id: &ProjectId,
+        bucket_interval: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(DateTime<Utc>, i64)>, LogDomainError>;
+
+    /// Get log counts by level over time
+    async fn get_levels_over_time(
+        &self,
+        project_id: &ProjectId,
+        bucket_interval: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(String, DateTime<Utc>, i64)>, LogDomainError>;
+
+    /// Get top sources by log count with error counts
+    async fn get_top_sources(
+        &self,
+        project_id: &ProjectId,
+        limit: i32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(String, i64, i64)>, LogDomainError>;
 }

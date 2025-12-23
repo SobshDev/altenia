@@ -216,3 +216,125 @@ pub struct FilterPresetResponse {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+// ==================== Metrics DTOs ====================
+
+/// Time bucket granularity for metrics
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TimeBucket {
+    Minute,
+    #[default]
+    Hour,
+    Day,
+}
+
+impl TimeBucket {
+    /// Convert to PostgreSQL interval string
+    pub fn to_interval(&self) -> &'static str {
+        match self {
+            TimeBucket::Minute => "1 minute",
+            TimeBucket::Hour => "1 hour",
+            TimeBucket::Day => "1 day",
+        }
+    }
+}
+
+/// Command to query metrics
+#[derive(Debug, Clone)]
+pub struct MetricsQuery {
+    pub project_id: String,
+    pub bucket: TimeBucket,
+    pub start_time: Option<DateTime<Utc>>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub top_sources_limit: i32,
+    pub requesting_user_id: String,
+}
+
+/// Single time bucket data point
+#[derive(Debug, Clone, Serialize)]
+pub struct TimeBucketCount {
+    pub bucket: DateTime<Utc>,
+    pub count: i64,
+}
+
+/// Error rate data point (percentage)
+#[derive(Debug, Clone, Serialize)]
+pub struct ErrorRatePoint {
+    pub bucket: DateTime<Utc>,
+    pub rate: f64,
+}
+
+/// Level-specific time series
+#[derive(Debug, Clone, Serialize)]
+pub struct LevelTimeSeries {
+    pub level: String,
+    pub data: Vec<TimeBucketCount>,
+}
+
+/// Top source with counts
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceCount {
+    pub source: String,
+    pub count: i64,
+    pub error_count: i64,
+}
+
+/// Full metrics response
+#[derive(Debug, Clone, Serialize)]
+pub struct MetricsResponse {
+    pub volume_over_time: Vec<TimeBucketCount>,
+    pub levels_over_time: Vec<LevelTimeSeries>,
+    pub error_rate_over_time: Vec<ErrorRatePoint>,
+    pub top_sources: Vec<SourceCount>,
+    pub summary: LogStatsResponse,
+}
+
+// ==================== Export DTOs ====================
+
+/// Request to export logs
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExportLogsRequest {
+    #[serde(default)]
+    pub levels: Option<Vec<String>>,
+    #[serde(default)]
+    pub start_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub end_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub search: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    /// Maximum number of logs to export (default: 100,000)
+    #[serde(default)]
+    pub max_logs: Option<i64>,
+}
+
+/// Metadata included in the export ZIP
+#[derive(Debug, Clone, Serialize)]
+pub struct ExportMetadata {
+    pub project_id: String,
+    pub project_name: String,
+    pub exported_at: DateTime<Utc>,
+    pub total_logs: i64,
+    pub filters: ExportFiltersMetadata,
+}
+
+/// Filters used for export (for metadata.json)
+#[derive(Debug, Clone, Serialize)]
+pub struct ExportFiltersMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub levels: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+}

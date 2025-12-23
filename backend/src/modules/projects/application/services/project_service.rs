@@ -11,8 +11,9 @@ use crate::modules::organizations::domain::{
 };
 use crate::modules::projects::application::dto::*;
 use crate::modules::projects::domain::{
-    ApiKey, ApiKeyId, ApiKeyName, ApiKeyPrefix, ApiKeyRepository, Project, ProjectDomainError,
-    ProjectId, ProjectName, ProjectRepository, RetentionDays,
+    ApiKey, ApiKeyId, ApiKeyName, ApiKeyPrefix, ApiKeyRepository, MetricsRetentionDays, Project,
+    ProjectDomainError, ProjectId, ProjectName, ProjectRepository, RetentionDays,
+    TracesRetentionDays,
 };
 
 /// Project service - orchestrates all project and API key use cases
@@ -155,10 +156,22 @@ where
             return Err(ProjectDomainError::ProjectAlreadyExists);
         }
 
-        // 4. Validate retention days
+        // 4. Validate retention settings
         let retention_days = cmd
             .retention_days
             .map(RetentionDays::new)
+            .transpose()?
+            .unwrap_or_default();
+
+        let metrics_retention_days = cmd
+            .metrics_retention_days
+            .map(MetricsRetentionDays::new)
+            .transpose()?
+            .unwrap_or_default();
+
+        let traces_retention_days = cmd
+            .traces_retention_days
+            .map(TracesRetentionDays::new)
             .transpose()?
             .unwrap_or_default();
 
@@ -170,6 +183,8 @@ where
             name,
             cmd.description,
             retention_days,
+            metrics_retention_days,
+            traces_retention_days,
         );
 
         // 6. Save project
@@ -181,6 +196,8 @@ where
             description: project.description().map(|s| s.to_string()),
             org_id: project.organization_id().as_str().to_string(),
             retention_days: project.retention_days().value(),
+            metrics_retention_days: project.metrics_retention_days().value(),
+            traces_retention_days: project.traces_retention_days().value(),
             created_at: project.created_at(),
             updated_at: project.updated_at(),
         })
@@ -210,6 +227,8 @@ where
                 description: p.description().map(|s| s.to_string()),
                 org_id: p.organization_id().as_str().to_string(),
                 retention_days: p.retention_days().value(),
+                metrics_retention_days: p.metrics_retention_days().value(),
+                traces_retention_days: p.traces_retention_days().value(),
                 created_at: p.created_at(),
                 updated_at: p.updated_at(),
             })
@@ -233,6 +252,8 @@ where
             description: project.description().map(|s| s.to_string()),
             org_id: project.organization_id().as_str().to_string(),
             retention_days: project.retention_days().value(),
+            metrics_retention_days: project.metrics_retention_days().value(),
+            traces_retention_days: project.traces_retention_days().value(),
             created_at: project.created_at(),
             updated_at: project.updated_at(),
         })
@@ -269,11 +290,25 @@ where
             None
         };
 
-        // 3. Validate retention days if changing
+        // 3. Validate retention settings if changing
         let new_retention = cmd.retention_days.map(RetentionDays::new).transpose()?;
+        let new_metrics_retention = cmd
+            .metrics_retention_days
+            .map(MetricsRetentionDays::new)
+            .transpose()?;
+        let new_traces_retention = cmd
+            .traces_retention_days
+            .map(TracesRetentionDays::new)
+            .transpose()?;
 
         // 4. Update project
-        project.update(new_name, cmd.description, new_retention);
+        project.update(
+            new_name,
+            cmd.description,
+            new_retention,
+            new_metrics_retention,
+            new_traces_retention,
+        );
         self.project_repo.save(&project).await?;
 
         Ok(ProjectResponse {
@@ -282,6 +317,8 @@ where
             description: project.description().map(|s| s.to_string()),
             org_id: project.organization_id().as_str().to_string(),
             retention_days: project.retention_days().value(),
+            metrics_retention_days: project.metrics_retention_days().value(),
+            traces_retention_days: project.traces_retention_days().value(),
             created_at: project.created_at(),
             updated_at: project.updated_at(),
         })

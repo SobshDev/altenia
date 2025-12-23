@@ -9,6 +9,8 @@ pub struct CreateProjectCommand {
     pub name: String,
     pub description: Option<String>,
     pub retention_days: Option<i32>,
+    pub metrics_retention_days: Option<i32>,
+    pub traces_retention_days: Option<i32>,
     pub requesting_user_id: String,
 }
 
@@ -19,6 +21,8 @@ pub struct UpdateProjectCommand {
     pub name: Option<String>,
     pub description: Option<Option<String>>,
     pub retention_days: Option<i32>,
+    pub metrics_retention_days: Option<i32>,
+    pub traces_retention_days: Option<i32>,
     pub requesting_user_id: String,
 }
 
@@ -56,6 +60,8 @@ pub struct ProjectResponse {
     pub description: Option<String>,
     pub org_id: String,
     pub retention_days: i32,
+    pub metrics_retention_days: i32,
+    pub traces_retention_days: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
