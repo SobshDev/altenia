@@ -74,7 +74,7 @@ function ActivityItem({ activity }: { activity: Activity }) {
 
   return (
     <div className="flex gap-3 py-3">
-      <div className={`p-2 rounded-lg ${config.bgColor} flex-shrink-0`}>
+      <div className={`w-8 h-8 rounded-lg ${config.bgColor} flex-shrink-0 flex items-center justify-center`}>
         <Icon className={`w-4 h-4 ${config.color}`} />
       </div>
       <div className="flex-1 min-w-0">

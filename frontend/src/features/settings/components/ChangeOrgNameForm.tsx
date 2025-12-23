@@ -65,16 +65,18 @@ export function ChangeOrgNameForm() {
             )}
           </p>
         </div>
-        {!isEditing && currentOrg && !currentOrg.is_personal && currentOrg.role === 'owner' && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsEditing(true)}
-            className="gap-2"
-          >
-            <Pencil className="w-4 h-4" />
-            Change
-          </Button>
+        {currentOrg && !currentOrg.is_personal && currentOrg.role === 'owner' && (
+          <div className={`transition-all duration-200 ${isEditing ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}`}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsEditing(true)}
+              className="gap-2"
+            >
+              <Pencil className="w-4 h-4" />
+              Change
+            </Button>
+          </div>
         )}
       </div>
 
@@ -92,10 +94,11 @@ export function ChangeOrgNameForm() {
       )}
 
       <div
-        className={`overflow-hidden transition-all duration-300 ease-out ${
-          isEditing ? 'opacity-100 max-h-96' : 'opacity-0 max-h-0'
+        className={`grid transition-all duration-300 ease-out ${
+          isEditing ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}
       >
+        <div className="overflow-hidden">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
           {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
 
@@ -116,6 +119,7 @@ export function ChangeOrgNameForm() {
             </Button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

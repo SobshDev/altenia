@@ -30,57 +30,59 @@ export function OrganizationPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* General Section */}
-        <SectionCard
-          icon={Building2}
-          title="General"
-          description="Organization name and details"
-          staggerDelay={100}
-        >
-          <ChangeOrgNameForm />
-        </SectionCard>
-
-        {/* Overview */}
-        <div
-          className="animate-fade-in-up"
-          style={{ '--stagger': '100ms' } as React.CSSProperties}
-        >
-          <OrganizationOverview />
-        </div>
-
-        {/* Members Section */}
-        <SectionCard
-          icon={Users}
-          title="Members"
-          description="Manage organization members and their roles"
-          staggerDelay={200}
-        >
-          <MembersSection />
-        </SectionCard>
-
-        {/* Activity Feed */}
-        <div
-          className="animate-fade-in-up"
-          style={{ '--stagger': '200ms' } as React.CSSProperties}
-        >
-          <ActivityFeed />
-        </div>
-
-        {/* Danger Zone - Full width at bottom */}
-        <div className="lg:col-span-2">
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left column */}
+        <div className="flex-1 space-y-6">
           <SectionCard
-            icon={AlertTriangle}
-            title="Danger Zone"
-            variant="destructive"
-            staggerDelay={300}
+            icon={Building2}
+            title="General"
+            description="Organization name and details"
+            staggerDelay={100}
           >
-            <div className="space-y-6">
-              <TransferOwnershipSection />
-              <LeaveOrgSection />
-            </div>
+            <ChangeOrgNameForm />
+          </SectionCard>
+
+          <SectionCard
+            icon={Users}
+            title="Members"
+            description="Manage organization members and their roles"
+            staggerDelay={200}
+          >
+            <MembersSection />
           </SectionCard>
         </div>
+
+        {/* Right column */}
+        <div className="flex-1 space-y-6">
+          <div
+            className="animate-fade-in-up"
+            style={{ '--stagger': '100ms' } as React.CSSProperties}
+          >
+            <OrganizationOverview />
+          </div>
+
+          <div
+            className="animate-fade-in-up"
+            style={{ '--stagger': '200ms' } as React.CSSProperties}
+          >
+            <ActivityFeed />
+          </div>
+        </div>
+      </div>
+
+      {/* Danger Zone - Full width at bottom */}
+      <div className="mt-6">
+        <SectionCard
+          icon={AlertTriangle}
+          title="Danger Zone"
+          variant="destructive"
+          staggerDelay={300}
+        >
+          <div className="space-y-6">
+            <TransferOwnershipSection />
+            <LeaveOrgSection />
+          </div>
+        </SectionCard>
       </div>
     </div>
   );
