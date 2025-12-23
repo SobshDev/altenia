@@ -4,17 +4,19 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::modules::auth::application::ports::{TokenClaims, TokenPair, TokenService};
+use crate::modules::auth::application::ports::{OrgContext, TokenClaims, TokenPair, TokenService};
 use crate::modules::auth::domain::{AuthDomainError, UserId};
 
 /// JWT claims structure
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
-    sub: String,        // user_id
-    email: String,      // user email
-    exp: i64,           // expiration time
-    iat: i64,           // issued at
-    token_type: String, // "access" or "refresh"
+    sub: String,                 // user_id
+    email: String,               // user email
+    org_id: Option<String>,      // organization id
+    org_role: Option<String>,    // role in organization
+    exp: i64,                    // expiration time
+    iat: i64,                    // issued at
+    token_type: String,          // "access" or "refresh"
 }
 
 /// JWT token service configuration
@@ -68,13 +70,21 @@ impl TokenService for JwtTokenService {
         &self,
         user_id: &UserId,
         email: &str,
+        org_context: Option<OrgContext>,
     ) -> Result<TokenPair, AuthDomainError> {
         let now = Utc::now().timestamp();
+
+        let (org_id, org_role) = match org_context {
+            Some(ctx) => (Some(ctx.org_id), Some(ctx.org_role)),
+            None => (None, None),
+        };
 
         // Generate access token
         let access_claims = Claims {
             sub: user_id.as_str().to_string(),
             email: email.to_string(),
+            org_id: org_id.clone(),
+            org_role: org_role.clone(),
             exp: now + self.config.access_expiry_secs,
             iat: now,
             token_type: "access".to_string(),
@@ -91,6 +101,8 @@ impl TokenService for JwtTokenService {
         let refresh_claims = Claims {
             sub: user_id.as_str().to_string(),
             email: email.to_string(),
+            org_id,
+            org_role,
             exp: now + self.config.refresh_expiry_secs,
             iat: now,
             token_type: "refresh".to_string(),
@@ -129,6 +141,8 @@ impl TokenService for JwtTokenService {
         Ok(TokenClaims {
             user_id: token_data.claims.sub,
             email: token_data.claims.email,
+            org_id: token_data.claims.org_id,
+            org_role: token_data.claims.org_role,
             exp: token_data.claims.exp,
             iat: token_data.claims.iat,
         })
@@ -152,6 +166,8 @@ impl TokenService for JwtTokenService {
         Ok(TokenClaims {
             user_id: token_data.claims.sub,
             email: token_data.claims.email,
+            org_id: token_data.claims.org_id,
+            org_role: token_data.claims.org_role,
             exp: token_data.claims.exp,
             iat: token_data.claims.iat,
         })
@@ -186,7 +202,7 @@ mod tests {
         let service = create_test_service();
         let user_id = UserId::new("user-123".to_string());
 
-        let result = service.generate_token_pair(&user_id, "test@example.com").await;
+        let result = service.generate_token_pair(&user_id, "test@example.com", None).await;
 
         assert!(result.is_ok());
         let token_pair = result.unwrap();
@@ -197,18 +213,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_generate_token_pair_with_org_context() {
+        let service = create_test_service();
+        let user_id = UserId::new("user-123".to_string());
+        let org_context = Some(OrgContext {
+            org_id: "org-456".to_string(),
+            org_role: "owner".to_string(),
+        });
+
+        let result = service.generate_token_pair(&user_id, "test@example.com", org_context).await;
+
+        assert!(result.is_ok());
+        let token_pair = result.unwrap();
+
+        // Validate the token contains org claims
+        let claims = service.validate_access_token(&token_pair.access_token).unwrap();
+        assert_eq!(claims.org_id, Some("org-456".to_string()));
+        assert_eq!(claims.org_role, Some("owner".to_string()));
+    }
+
+    #[tokio::test]
     async fn test_validate_access_token_success() {
         let service = create_test_service();
         let user_id = UserId::new("user-123".to_string());
         let email = "test@example.com";
 
-        let token_pair = service.generate_token_pair(&user_id, email).await.unwrap();
+        let token_pair = service.generate_token_pair(&user_id, email, None).await.unwrap();
         let claims = service.validate_access_token(&token_pair.access_token);
 
         assert!(claims.is_ok());
         let claims = claims.unwrap();
         assert_eq!(claims.user_id, "user-123");
         assert_eq!(claims.email, email);
+        assert!(claims.org_id.is_none());
+        assert!(claims.org_role.is_none());
     }
 
     #[tokio::test]
@@ -216,7 +254,7 @@ mod tests {
         let service = create_test_service();
         let user_id = UserId::new("user-123".to_string());
 
-        let token_pair = service.generate_token_pair(&user_id, "test@example.com").await.unwrap();
+        let token_pair = service.generate_token_pair(&user_id, "test@example.com", None).await.unwrap();
         let result = service.validate_access_token(&token_pair.refresh_token);
 
         assert!(matches!(result, Err(AuthDomainError::TokenInvalid)));
@@ -236,7 +274,7 @@ mod tests {
         let user_id = UserId::new("user-456".to_string());
         let email = "refresh@example.com";
 
-        let token_pair = service.generate_token_pair(&user_id, email).await.unwrap();
+        let token_pair = service.generate_token_pair(&user_id, email, None).await.unwrap();
         let claims = service.decode_refresh_token(&token_pair.refresh_token);
 
         assert!(claims.is_ok());
@@ -250,7 +288,7 @@ mod tests {
         let service = create_test_service();
         let user_id = UserId::new("user-123".to_string());
 
-        let token_pair = service.generate_token_pair(&user_id, "test@example.com").await.unwrap();
+        let token_pair = service.generate_token_pair(&user_id, "test@example.com", None).await.unwrap();
         let result = service.decode_refresh_token(&token_pair.access_token);
 
         assert!(matches!(result, Err(AuthDomainError::TokenInvalid)));

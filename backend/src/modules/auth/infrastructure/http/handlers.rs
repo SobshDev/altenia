@@ -16,6 +16,7 @@ use crate::modules::auth::domain::{
     AuthDomainError, PasswordHasher, RefreshTokenRepository, UserRepository,
 };
 use crate::modules::auth::application::ports::{IdGenerator, TokenService};
+use crate::modules::organizations::domain::{OrganizationMemberRepository, OrganizationRepository};
 
 /// Generate device fingerprint from User-Agent and X-Forwarded-For headers
 /// Uses /24 subnet for IPv4 to allow for NAT variations
@@ -189,8 +190,8 @@ fn to_error_response(e: AuthDomainError) -> (StatusCode, Json<ErrorResponse>) {
 // ============================================================================
 
 /// POST /api/auth/register
-pub async fn register<U, T, P, TS, ID>(
-    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID>>>,
+pub async fn register<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
     headers: HeaderMap,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponseDto>, (StatusCode, Json<ErrorResponse>)>
@@ -200,6 +201,8 @@ where
     P: PasswordHasher,
     TS: TokenService,
     ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
 {
     let device_fingerprint = generate_device_fingerprint(&headers);
 
@@ -217,8 +220,8 @@ where
 }
 
 /// POST /api/auth/login
-pub async fn login<U, T, P, TS, ID>(
-    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID>>>,
+pub async fn login<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
     headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<AuthResponseDto>, (StatusCode, Json<ErrorResponse>)>
@@ -228,6 +231,8 @@ where
     P: PasswordHasher,
     TS: TokenService,
     ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
 {
     let device_fingerprint = generate_device_fingerprint(&headers);
 
@@ -245,8 +250,8 @@ where
 }
 
 /// POST /api/auth/refresh
-pub async fn refresh<U, T, P, TS, ID>(
-    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID>>>,
+pub async fn refresh<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
     headers: HeaderMap,
     Json(req): Json<RefreshRequest>,
 ) -> Result<Json<AuthResponseDto>, (StatusCode, Json<ErrorResponse>)>
@@ -256,6 +261,8 @@ where
     P: PasswordHasher,
     TS: TokenService,
     ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
 {
     let device_fingerprint = generate_device_fingerprint(&headers);
 
@@ -272,8 +279,8 @@ where
 }
 
 /// POST /api/auth/logout (protected)
-pub async fn logout<U, T, P, TS, ID>(
-    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID>>>,
+pub async fn logout<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
     Extension(claims): Extension<AuthClaims>,
     Json(req): Json<LogoutRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
@@ -283,6 +290,8 @@ where
     P: PasswordHasher,
     TS: TokenService,
     ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
 {
     let cmd = LogoutCommand {
         user_id: claims.user_id,
@@ -297,8 +306,8 @@ where
 }
 
 /// GET /api/auth/me (protected)
-pub async fn me<U, T, P, TS, ID>(
-    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID>>>,
+pub async fn me<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
     Extension(claims): Extension<AuthClaims>,
 ) -> Result<Json<UserResponseDto>, (StatusCode, Json<ErrorResponse>)>
 where
@@ -307,6 +316,8 @@ where
     P: PasswordHasher,
     TS: TokenService,
     ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
 {
     auth_service
         .get_current_user(&claims.user_id)
