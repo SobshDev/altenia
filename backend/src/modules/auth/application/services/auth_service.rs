@@ -541,6 +541,7 @@ mod tests {
         let cmd = RegisterUserCommand {
             email: "newuser@example.com".to_string(),
             password: "SecurePass123!".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.register(cmd).await;
@@ -560,6 +561,7 @@ mod tests {
         let cmd = RegisterUserCommand {
             email: "existing@example.com".to_string(),
             password: "SecurePass123!".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.register(cmd).await;
@@ -574,6 +576,7 @@ mod tests {
         let cmd = RegisterUserCommand {
             email: "invalid-email".to_string(),
             password: "SecurePass123!".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.register(cmd).await;
@@ -588,6 +591,7 @@ mod tests {
         let cmd = RegisterUserCommand {
             email: "user@example.com".to_string(),
             password: "short".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.register(cmd).await;
@@ -605,6 +609,7 @@ mod tests {
         let cmd = LoginCommand {
             email: "test@example.com".to_string(),
             password: "CorrectPass1!".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.login(cmd).await;
@@ -623,6 +628,7 @@ mod tests {
         let cmd = LoginCommand {
             email: "test@example.com".to_string(),
             password: "WrongPass1!".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.login(cmd).await;
@@ -637,6 +643,7 @@ mod tests {
         let cmd = LoginCommand {
             email: "nonexistent@example.com".to_string(),
             password: "SomePass1!".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.login(cmd).await;
@@ -651,6 +658,7 @@ mod tests {
         let cmd = LoginCommand {
             email: "not-an-email".to_string(),
             password: "SomePass1!".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.login(cmd).await;
@@ -667,6 +675,7 @@ mod tests {
             TokenId::new("token-1".to_string()),
             UserId::new("user-1".to_string()),
             "hash_refresh_token_user-1".to_string(),
+            "test-fingerprint".to_string(),
             Utc::now() + Duration::days(7),
         );
 
@@ -711,6 +720,7 @@ mod tests {
             TokenId::new("token-1".to_string()),
             user_id.clone(),
             "hash_refresh_token_user-1".to_string(),
+            "test-fingerprint".to_string(),
             Utc::now() + Duration::days(7),
         );
 
@@ -726,6 +736,7 @@ mod tests {
 
         let cmd = RefreshTokenCommand {
             refresh_token: "refresh_token_user-1".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.refresh(cmd).await;
@@ -747,6 +758,7 @@ mod tests {
 
         let cmd = RefreshTokenCommand {
             refresh_token: "invalid_token".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.refresh(cmd).await;
@@ -760,6 +772,7 @@ mod tests {
 
         let cmd = RefreshTokenCommand {
             refresh_token: "refresh_token_user-1".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.refresh(cmd).await;
@@ -774,6 +787,7 @@ mod tests {
             TokenId::new("token-1".to_string()),
             user_id.clone(),
             "hash_refresh_token_user-1".to_string(),
+            "test-fingerprint".to_string(),
             Utc::now() + Duration::days(7),
         );
         token.revoke();
@@ -788,6 +802,7 @@ mod tests {
 
         let cmd = RefreshTokenCommand {
             refresh_token: "refresh_token_user-1".to_string(),
+            device_fingerprint: "test-fingerprint".to_string(),
         };
 
         let result = service.refresh(cmd).await;
