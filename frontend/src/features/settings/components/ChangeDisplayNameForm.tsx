@@ -4,17 +4,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Pencil } from 'lucide-react';
 import { Button } from '@/shared/components/Button';
 import { Input } from '@/shared/components/Input';
-import { PasswordInput } from '@/shared/components/PasswordInput';
 import { ErrorAlert } from '@/shared/components/ErrorAlert';
 import { SuccessAlert } from '@/shared/components/SuccessAlert';
 import { useAuthStore } from '@/stores/authStore';
 import {
-  changeEmailSchema,
-  type ChangeEmailFormValues,
+  changeDisplayNameSchema,
+  type ChangeDisplayNameFormValues,
 } from '../schemas/settingsSchemas';
 
-export function ChangeEmailForm() {
-  const { user, updateEmail } = useAuthStore();
+export function ChangeDisplayNameForm() {
+  const { user, updateDisplayName } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,21 +24,23 @@ export function ChangeEmailForm() {
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<ChangeEmailFormValues>({
-    resolver: zodResolver(changeEmailSchema),
+  } = useForm<ChangeDisplayNameFormValues>({
+    resolver: zodResolver(changeDisplayNameSchema),
+    defaultValues: {
+      displayName: user?.display_name || '',
+    },
   });
 
-  const onSubmit = async (data: ChangeEmailFormValues) => {
+  const onSubmit = async (data: ChangeDisplayNameFormValues) => {
     setIsLoading(true);
     setError(null);
     try {
-      await updateEmail(data.newEmail, data.currentPassword);
+      await updateDisplayName(data.displayName);
       setSuccess(true);
       setIsEditing(false);
-      reset();
       setTimeout(() => setSuccess(false), 5000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update email');
+      setError(err instanceof Error ? err.message : 'Failed to update display name');
     } finally {
       setIsLoading(false);
     }
@@ -48,7 +49,7 @@ export function ChangeEmailForm() {
   const handleCancel = () => {
     setIsEditing(false);
     setError(null);
-    reset();
+    reset({ displayName: user?.display_name || '' });
   };
 
   return (
@@ -56,15 +57,15 @@ export function ChangeEmailForm() {
       <div className="flex items-center justify-between">
         <div>
           <label className="text-sm font-medium text-foreground-muted">
-            Email address
+            Display name
           </label>
           <p className="text-foreground">
-            {user?.email || (
-              <span className="text-foreground-subtle">Loading...</span>
+            {user?.display_name || (
+              <span className="text-foreground-subtle italic">Not set</span>
             )}
           </p>
         </div>
-        {!isEditing && user?.email && (
+        {!isEditing && (
           <Button
             variant="ghost"
             size="sm"
@@ -72,14 +73,14 @@ export function ChangeEmailForm() {
             className="gap-2"
           >
             <Pencil className="w-4 h-4" />
-            Change
+            {user?.display_name ? 'Change' : 'Set'}
           </Button>
         )}
       </div>
 
       {success && (
         <SuccessAlert
-          message="Email updated successfully"
+          message="Display name updated successfully"
           onDismiss={() => setSuccess(false)}
         />
       )}
@@ -93,23 +94,20 @@ export function ChangeEmailForm() {
           {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
 
           <Input
-            label="New email address"
-            type="email"
-            placeholder="Enter your new email"
-            error={errors.newEmail?.message}
-            {...register('newEmail')}
+            label="Display name"
+            placeholder="e.g., John Doe"
+            error={errors.displayName?.message}
+            maxLength={30}
+            {...register('displayName')}
           />
 
-          <PasswordInput
-            label="Current password"
-            placeholder="Enter your current password"
-            error={errors.currentPassword?.message}
-            {...register('currentPassword')}
-          />
+          <p className="text-xs text-foreground-subtle">
+            1-30 characters. Letters, spaces, dashes, and apostrophes allowed.
+          </p>
 
           <div className="flex gap-3 pt-2">
             <Button type="submit" isLoading={isLoading}>
-              Update email
+              Update display name
             </Button>
             <Button type="button" variant="ghost" onClick={handleCancel}>
               Cancel

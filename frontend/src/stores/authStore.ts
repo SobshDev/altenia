@@ -15,6 +15,8 @@ interface AuthState {
   clearError: () => void;
   updateEmail: (newEmail: string, currentPassword: string) => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
+  deleteAccount: (currentPassword: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -37,7 +39,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: {
           id: response.user_id,
           email: response.email,
-          created_at: '',
+          display_name: response.display_name,
         },
         isAuthenticated: true,
         isLoading: false,
@@ -65,7 +67,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: {
           id: response.user_id,
           email: response.email,
-          created_at: '',
+          display_name: response.display_name,
         },
         isAuthenticated: true,
         isLoading: false,
@@ -123,5 +125,22 @@ export const useAuthStore = create<AuthState>((set) => ({
       current_password: currentPassword,
       new_password: newPassword,
     });
+  },
+
+  updateDisplayName: async (displayName: string) => {
+    await apiClient.patch('/auth/me/display-name', {
+      display_name: displayName,
+    });
+    set((state) => ({
+      user: state.user ? { ...state.user, display_name: displayName } : null,
+    }));
+  },
+
+  deleteAccount: async (currentPassword: string) => {
+    await apiClient.delete('/auth/me', {
+      current_password: currentPassword,
+    });
+    apiClient.clearTokens();
+    set({ user: null, isAuthenticated: false });
   },
 }));

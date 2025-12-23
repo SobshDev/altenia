@@ -4,4 +4,4 @@ pub mod value_objects;
 
 pub use entity::User;
 pub use repository::UserRepository;
-pub use value_objects::{Email, PasswordHash, PlainPassword, UserId};
+pub use value_objects::{DisplayName, Email, PasswordHash, PlainPassword, UserId};

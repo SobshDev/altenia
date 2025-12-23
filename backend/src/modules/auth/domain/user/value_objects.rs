@@ -73,6 +73,51 @@ impl PasswordHash {
     }
 }
 
+/// Display name - user's chosen display name
+/// 1-30 characters, Unicode letters, spaces, dashes, apostrophes allowed
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisplayName(String);
+
+impl DisplayName {
+    const MIN_LENGTH: usize = 1;
+    const MAX_LENGTH: usize = 30;
+
+    pub fn new(name: String) -> Result<Self, AuthDomainError> {
+        let name = name.trim().to_string();
+
+        if name.len() < Self::MIN_LENGTH {
+            return Err(AuthDomainError::InvalidDisplayName(
+                "must be at least 1 character".to_string(),
+            ));
+        }
+
+        if name.chars().count() > Self::MAX_LENGTH {
+            return Err(AuthDomainError::InvalidDisplayName(
+                format!("must not exceed {} characters", Self::MAX_LENGTH),
+            ));
+        }
+
+        // Validate characters: Unicode letters, spaces, dashes, apostrophes
+        for c in name.chars() {
+            if !c.is_alphabetic() && c != ' ' && c != '-' && c != '\'' {
+                return Err(AuthDomainError::InvalidDisplayName(
+                    "can only contain letters, spaces, dashes, and apostrophes".to_string(),
+                ));
+            }
+        }
+
+        Ok(Self(name))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
 /// Plain password - for validation before hashing
 /// Never stored, only used in transit
 #[derive(Debug, Clone)]

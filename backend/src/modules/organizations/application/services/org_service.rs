@@ -336,6 +336,7 @@ where
             id: member.id().as_str().to_string(),
             user_id: target_user_id.as_str().to_string(),
             email: cmd.email,
+            display_name: user.display_name().map(|d| d.as_str().to_string()),
             role: new_role.as_str().to_string(),
             joined_at: member.created_at(),
         })
@@ -383,6 +384,7 @@ where
                     id: membership.id().as_str().to_string(),
                     user_id: membership.user_id().as_str().to_string(),
                     email: user.email().as_str().to_string(),
+                    display_name: user.display_name().map(|d| d.as_str().to_string()),
                     role: membership.role().as_str().to_string(),
                     joined_at: membership.created_at(),
                 });
@@ -446,6 +448,7 @@ where
             id: target_membership.id().as_str().to_string(),
             user_id: cmd.target_user_id,
             email: user.email().as_str().to_string(),
+            display_name: user.display_name().map(|d| d.as_str().to_string()),
             role: new_role.as_str().to_string(),
             joined_at: target_membership.created_at(),
         })
@@ -524,13 +527,13 @@ where
     pub async fn transfer_ownership(
         &self,
         cmd: TransferOwnershipCommand,
-    ) -> Result<(), OrgDomainError> {
+    ) -> Result<SwitchOrgResponse, OrgDomainError> {
         let org_id = OrgId::new(cmd.org_id);
         let requesting_user_id = UserId::new(cmd.requesting_user_id);
         let new_owner_user_id = UserId::new(cmd.new_owner_user_id);
 
         // 1. Verify requester is owner
-        let requester_membership = self
+        let mut requester_membership = self
             .member_repo
             .find_by_org_and_user(&org_id, &requesting_user_id)
             .await?
@@ -551,7 +554,50 @@ where
         new_owner_membership.update_role(OrgRole::Owner);
         self.member_repo.save(&new_owner_membership).await?;
 
-        Ok(())
+        // 4. Demote current owner to admin
+        requester_membership.update_role(OrgRole::Admin);
+        self.member_repo.save(&requester_membership).await?;
+
+        // 5. Get organization details
+        let org = self
+            .org_repo
+            .find_by_id(&org_id)
+            .await?
+            .ok_or(OrgDomainError::OrgNotFound)?;
+
+        // 6. Get user email for token generation
+        let user = self
+            .user_repo
+            .find_by_id(&requesting_user_id)
+            .await
+            .map_err(|e| OrgDomainError::InternalError(e.to_string()))?
+            .ok_or(OrgDomainError::UserNotFound)?;
+
+        // 7. Generate new tokens with updated role
+        let org_context = Some(OrgContext {
+            org_id: org.id().as_str().to_string(),
+            org_role: requester_membership.role().as_str().to_string(),
+        });
+
+        let token_pair = self
+            .token_service
+            .generate_token_pair(&requesting_user_id, user.email().as_str(), org_context)
+            .await
+            .map_err(|e| OrgDomainError::InternalError(e.to_string()))?;
+
+        Ok(SwitchOrgResponse {
+            access_token: token_pair.access_token,
+            refresh_token: token_pair.refresh_token,
+            expires_in: token_pair.access_expires_in,
+            organization: OrgResponse {
+                id: org.id().as_str().to_string(),
+                name: org.name().as_str().to_string(),
+                slug: org.slug().as_str().to_string(),
+                is_personal: org.is_personal(),
+                role: requester_membership.role().as_str().to_string(),
+                created_at: org.created_at(),
+            },
+        })
     }
 
     /// Switch to a different organization

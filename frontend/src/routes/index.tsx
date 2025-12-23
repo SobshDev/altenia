@@ -1,26 +1,51 @@
+import { useEffect } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { AccountPage } from '@/features/settings/pages/AccountPage';
+import { OrganizationPage } from '@/features/settings/pages/OrganizationPage';
 import { AppLayout } from '@/shared/components/layout/AppLayout';
+import { UsernamePromptModal } from '@/shared/components/UsernamePromptModal';
 import { useAuthStore } from '@/stores/authStore';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { isAuthenticated, isLoading, user, checkAuth } = useAuthStore();
+
+  useEffect(() => {
+    if (isAuthenticated && !user) {
+      checkAuth();
+    }
+  }, [isAuthenticated, user, checkAuth]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return <>{children}</>;
 }
 
 function DashboardPage() {
+  const { user } = useAuthStore();
+  const needsDisplayName = user && !user.display_name;
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-      <p className="mt-2 text-foreground-muted">Welcome to Altenia</p>
-    </div>
+    <>
+      <UsernamePromptModal isOpen={needsDisplayName ?? false} />
+      <div className="p-8">
+        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <p className="mt-2 text-foreground-muted">
+          Welcome{user?.display_name ? `, ${user.display_name}` : ''} to Altenia
+        </p>
+      </div>
+    </>
   );
 }
 
@@ -73,6 +98,10 @@ export const router = createBrowserRouter([
       {
         path: 'settings/account',
         element: <AccountPage />,
+      },
+      {
+        path: 'settings/organization',
+        element: <OrganizationPage />,
       },
     ],
   },

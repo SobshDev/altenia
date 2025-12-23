@@ -1,9 +1,11 @@
-import { User, Shield, AlertTriangle } from 'lucide-react';
+import { User, Shield, AlertTriangle, LogOut } from 'lucide-react';
 import { Button } from '@/shared/components/Button';
 import { useAuthStore } from '@/stores/authStore';
 import { SectionCard } from '../components/SectionCard';
+import { ChangeDisplayNameForm } from '../components/ChangeDisplayNameForm';
 import { ChangeEmailForm } from '../components/ChangeEmailForm';
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
+import { DeleteAccountSection } from '../components/DeleteAccountSection';
 
 export function AccountPage() {
   const { logout } = useAuthStore();
@@ -13,23 +15,40 @@ export function AccountPage() {
       <div className="max-w-2xl space-y-6">
         {/* Page Header */}
         <div
-          className="animate-fade-in-up"
+          className="flex items-start justify-between animate-fade-in-up"
           style={{ '--stagger': '0ms' } as React.CSSProperties}
         >
-          <h1 className="text-2xl font-bold text-foreground">Account Settings</h1>
-          <p className="mt-1 text-foreground-muted">
-            Manage your account preferences and security
-          </p>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              Account Settings
+            </h1>
+            <p className="mt-1 text-foreground-muted">
+              Manage your account preferences and security
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            onClick={() => logout()}
+            className="gap-2 text-foreground-muted hover:text-foreground"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </Button>
         </div>
 
         {/* Account Section */}
         <SectionCard
           icon={User}
-          title="Account"
-          description="Your account email and preferences"
+          title="Profile"
+          description="Your display name and account details"
           staggerDelay={100}
         >
-          <ChangeEmailForm />
+          <div className="space-y-6">
+            <ChangeDisplayNameForm />
+            <div className="border-t border-border pt-6">
+              <ChangeEmailForm />
+            </div>
+          </div>
         </SectionCard>
 
         {/* Security Section */}
@@ -49,21 +68,7 @@ export function AccountPage() {
           variant="destructive"
           staggerDelay={300}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-foreground">Sign out of your account</p>
-              <p className="text-xs text-foreground-muted mt-0.5">
-                You will need to sign in again to access your data
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              onClick={() => logout()}
-              className="text-destructive hover:bg-destructive/10"
-            >
-              Sign out
-            </Button>
-          </div>
+          <DeleteAccountSection />
         </SectionCard>
       </div>
     </div>

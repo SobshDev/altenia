@@ -7,8 +7,10 @@ pub struct UserRow {
     pub id: String,
     pub email: String,
     pub password_hash: Option<String>,
+    pub display_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 /// Database row for refresh_tokens table

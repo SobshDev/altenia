@@ -4,12 +4,12 @@ use chrono::{Duration, Utc};
 use rand::Rng;
 
 use crate::modules::auth::application::dto::{
-    AuthResponse, ChangeEmailCommand, ChangePasswordCommand, LoginCommand, LogoutCommand,
-    RefreshTokenCommand, RegisterUserCommand,
+    AuthResponse, ChangeEmailCommand, ChangePasswordCommand, DeleteAccountCommand, LoginCommand,
+    LogoutCommand, RefreshTokenCommand, RegisterUserCommand, UpdateDisplayNameCommand,
 };
 use crate::modules::auth::application::ports::{IdGenerator, OrgContext, TokenService};
 use crate::modules::auth::domain::{
-    AuthDomainError, Email, PasswordHash, PasswordHasher, PlainPassword, RefreshToken,
+    AuthDomainError, DisplayName, Email, PasswordHash, PasswordHasher, PlainPassword, RefreshToken,
     RefreshTokenRepository, TokenId, User, UserId, UserRepository,
 };
 use crate::modules::organizations::domain::{
@@ -222,6 +222,7 @@ where
         Ok(AuthResponse::new(
             user_id.into_inner(),
             email.into_inner(),
+            None, // New users don't have display_name yet
             token_pair.access_token,
             token_pair.refresh_token,
             token_pair.access_expires_in,
@@ -292,6 +293,7 @@ where
         Ok(AuthResponse::new(
             user.id().as_str().to_string(),
             user.email().as_str().to_string(),
+            user.display_name().map(|d| d.as_str().to_string()),
             token_pair.access_token,
             token_pair.refresh_token,
             token_pair.access_expires_in,
@@ -375,9 +377,17 @@ where
         )
         .await?;
 
+        // 9. Fetch user to get current display_name
+        let user = self
+            .user_repo
+            .find_by_id(&user_id)
+            .await?
+            .ok_or(AuthDomainError::UserNotFound)?;
+
         Ok(AuthResponse::new(
-            user_id.into_inner(),
-            claims.email,
+            user.id().as_str().to_string(),
+            user.email().as_str().to_string(),
+            user.display_name().map(|d| d.as_str().to_string()),
             token_pair.access_token,
             token_pair.refresh_token,
             token_pair.access_expires_in,
@@ -391,6 +401,29 @@ where
             .find_by_id(&user_id)
             .await?
             .ok_or(AuthDomainError::UserNotFound)
+    }
+
+    /// Update user's display name
+    pub async fn update_display_name(
+        &self,
+        cmd: UpdateDisplayNameCommand,
+    ) -> Result<(), AuthDomainError> {
+        // 1. Validate display name
+        let display_name = DisplayName::new(cmd.display_name)?;
+
+        // 2. Get current user
+        let user_id = UserId::new(cmd.user_id);
+        let mut user = self
+            .user_repo
+            .find_by_id(&user_id)
+            .await?
+            .ok_or(AuthDomainError::UserNotFound)?;
+
+        // 3. Update display name
+        user.update_display_name(display_name);
+
+        // 4. Persist changes
+        self.user_repo.save(&user).await
     }
 
     /// Change user's email address
@@ -475,6 +508,133 @@ where
 
         // 7. Persist changes
         self.user_repo.save(&user).await
+    }
+
+    /// Delete user's account
+    /// - Transfers ownership to the highest-ranking, longest-tenured member for each org
+    /// - Soft deletes organizations where user is the only member
+    /// - Soft deletes the user (data retained for 30 days)
+    pub async fn delete_account(&self, cmd: DeleteAccountCommand) -> Result<(), AuthDomainError> {
+        // 1. Get current user
+        let user_id = UserId::new(cmd.user_id);
+        let mut user = self
+            .user_repo
+            .find_by_id(&user_id)
+            .await?
+            .ok_or(AuthDomainError::UserNotFound)?;
+
+        // 2. Check user has a password (not OAuth-only)
+        let password_hash = user
+            .password_hash()
+            .cloned()
+            .ok_or(AuthDomainError::NoPasswordSet)?;
+
+        // 3. Verify current password
+        let current_password = PlainPassword::for_verification(cmd.current_password);
+        let is_valid = self
+            .password_hasher
+            .verify(&current_password, &password_hash)
+            .await?;
+        if !is_valid {
+            return Err(AuthDomainError::InvalidCredentials);
+        }
+
+        // 4. Get all organizations where user is a member
+        let memberships = self
+            .member_repo
+            .find_all_by_user(&user_id)
+            .await
+            .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+
+        // 5. Process each organization
+        for membership in memberships {
+            let org_id = membership.organization_id().clone();
+
+            // Get organization
+            let org = self
+                .org_repo
+                .find_by_id(&org_id)
+                .await
+                .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+
+            if let Some(mut org) = org {
+                // Skip already deleted orgs
+                if org.is_deleted() {
+                    continue;
+                }
+
+                // Get all members of this org
+                let all_members = self
+                    .member_repo
+                    .find_all_by_org(&org_id)
+                    .await
+                    .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+
+                // Filter out the current user
+                let other_members: Vec<_> = all_members
+                    .iter()
+                    .filter(|m| m.user_id().as_str() != user_id.as_str())
+                    .collect();
+
+                if other_members.is_empty() {
+                    // User is the only member - soft delete the org
+                    // Personal orgs can be deleted when the user deletes their account
+                    if !org.is_personal() {
+                        let _ = org.soft_delete();
+                        self.org_repo
+                            .save(&org)
+                            .await
+                            .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+                    }
+                    // For personal orgs, they will be orphaned but that's fine
+                    // as the user is being deleted
+                } else if membership.role() == &OrgRole::Owner {
+                    // User is owner - need to transfer ownership
+                    // Find the best successor: highest role first, then longest tenure (earliest created_at)
+                    let successor = other_members
+                        .iter()
+                        .max_by(|a, b| {
+                            // Compare by role priority first (Owner > Admin > Member)
+                            let role_priority = |r: &OrgRole| match r {
+                                OrgRole::Owner => 2,
+                                OrgRole::Admin => 1,
+                                OrgRole::Member => 0,
+                            };
+                            let role_cmp = role_priority(a.role()).cmp(&role_priority(b.role()));
+                            if role_cmp != std::cmp::Ordering::Equal {
+                                return role_cmp;
+                            }
+                            // If same role, compare by tenure (earlier created_at = longer tenure)
+                            b.created_at().cmp(&a.created_at())
+                        });
+
+                    if let Some(successor) = successor {
+                        // Promote the successor to owner
+                        let mut successor_member = (*successor).clone();
+                        successor_member.update_role(OrgRole::Owner);
+                        self.member_repo
+                            .save(&successor_member)
+                            .await
+                            .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+                    }
+                }
+
+                // Delete the user's membership
+                self.member_repo
+                    .delete(membership.id())
+                    .await
+                    .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
+            }
+        }
+
+        // 6. Revoke all refresh tokens
+        self.token_repo.revoke_all_for_user(&user_id).await?;
+
+        // 7. Soft delete user (data retained for 30 days)
+        user.soft_delete()?;
+        self.user_repo.save(&user).await?;
+
+        Ok(())
     }
 
     /// Helper: store refresh token in database

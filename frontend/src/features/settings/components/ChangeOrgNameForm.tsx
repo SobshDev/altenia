@@ -4,17 +4,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Pencil } from 'lucide-react';
 import { Button } from '@/shared/components/Button';
 import { Input } from '@/shared/components/Input';
-import { PasswordInput } from '@/shared/components/PasswordInput';
 import { ErrorAlert } from '@/shared/components/ErrorAlert';
 import { SuccessAlert } from '@/shared/components/SuccessAlert';
-import { useAuthStore } from '@/stores/authStore';
+import { useOrgStore } from '@/stores/orgStore';
 import {
-  changeEmailSchema,
-  type ChangeEmailFormValues,
+  changeOrgNameSchema,
+  type ChangeOrgNameFormValues,
 } from '../schemas/settingsSchemas';
 
-export function ChangeEmailForm() {
-  const { user, updateEmail } = useAuthStore();
+export function ChangeOrgNameForm() {
+  const { currentOrg, updateOrg } = useOrgStore();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,21 +24,21 @@ export function ChangeEmailForm() {
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<ChangeEmailFormValues>({
-    resolver: zodResolver(changeEmailSchema),
+  } = useForm<ChangeOrgNameFormValues>({
+    resolver: zodResolver(changeOrgNameSchema),
   });
 
-  const onSubmit = async (data: ChangeEmailFormValues) => {
+  const onSubmit = async (data: ChangeOrgNameFormValues) => {
     setIsLoading(true);
     setError(null);
     try {
-      await updateEmail(data.newEmail, data.currentPassword);
+      await updateOrg(data.name);
       setSuccess(true);
       setIsEditing(false);
       reset();
       setTimeout(() => setSuccess(false), 5000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update email');
+      setError(err instanceof Error ? err.message : 'Failed to update organization name');
     } finally {
       setIsLoading(false);
     }
@@ -51,20 +50,22 @@ export function ChangeEmailForm() {
     reset();
   };
 
+  const displayName = currentOrg?.is_personal ? 'Personal' : currentOrg?.name;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <label className="text-sm font-medium text-foreground-muted">
-            Email address
+            Organization name
           </label>
           <p className="text-foreground">
-            {user?.email || (
+            {displayName || (
               <span className="text-foreground-subtle">Loading...</span>
             )}
           </p>
         </div>
-        {!isEditing && user?.email && (
+        {!isEditing && currentOrg && !currentOrg.is_personal && currentOrg.role === 'owner' && (
           <Button
             variant="ghost"
             size="sm"
@@ -77,9 +78,15 @@ export function ChangeEmailForm() {
         )}
       </div>
 
+      {currentOrg?.is_personal && (
+        <p className="text-sm text-foreground-muted">
+          Personal organization names cannot be changed.
+        </p>
+      )}
+
       {success && (
         <SuccessAlert
-          message="Email updated successfully"
+          message="Organization name updated successfully"
           onDismiss={() => setSuccess(false)}
         />
       )}
@@ -93,23 +100,16 @@ export function ChangeEmailForm() {
           {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
 
           <Input
-            label="New email address"
-            type="email"
-            placeholder="Enter your new email"
-            error={errors.newEmail?.message}
-            {...register('newEmail')}
-          />
-
-          <PasswordInput
-            label="Current password"
-            placeholder="Enter your current password"
-            error={errors.currentPassword?.message}
-            {...register('currentPassword')}
+            label="New organization name"
+            type="text"
+            placeholder="Enter new name"
+            error={errors.name?.message}
+            {...register('name')}
           />
 
           <div className="flex gap-3 pt-2">
             <Button type="submit" isLoading={isLoading}>
-              Update email
+              Update name
             </Button>
             <Button type="button" variant="ghost" onClick={handleCancel}>
               Cancel

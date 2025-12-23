@@ -21,5 +21,28 @@ export const changePasswordSchema = z
     path: ['confirmNewPassword'],
   });
 
+export const changeOrgNameSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name must be less than 100 characters'),
+});
+
+export const addMemberSchema = z.object({
+  email: z.string().min(1, 'Email is required').email('Invalid email address'),
+  role: z.enum(['admin', 'member']),
+});
+
+export const changeDisplayNameSchema = z.object({
+  displayName: z
+    .string()
+    .min(1, 'Display name is required')
+    .max(30, 'Display name must not exceed 30 characters')
+    .regex(
+      /^[\p{L}\s\-']+$/u,
+      'Display name can only contain letters, spaces, dashes, and apostrophes'
+    ),
+});
+
 export type ChangeEmailFormValues = z.infer<typeof changeEmailSchema>;
 export type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
+export type ChangeOrgNameFormValues = z.infer<typeof changeOrgNameSchema>;
+export type AddMemberFormValues = z.infer<typeof addMemberSchema>;
+export type ChangeDisplayNameFormValues = z.infer<typeof changeDisplayNameSchema>;

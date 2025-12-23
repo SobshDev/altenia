@@ -6,10 +6,12 @@ pub enum AuthDomainError {
     InvalidEmail(String),
     InvalidPassword(String),
     WeakPassword(String),
+    InvalidDisplayName(String),
 
     // User errors
     UserNotFound,
     UserAlreadyExists,
+    UserAlreadyDeleted,
     InvalidCredentials,
     NoPasswordSet,
     EmailAlreadyInUse,
@@ -29,8 +31,10 @@ impl fmt::Display for AuthDomainError {
             Self::InvalidEmail(_) => write!(f, "Invalid email format"),
             Self::InvalidPassword(msg) => write!(f, "Invalid password: {}", msg),
             Self::WeakPassword(reason) => write!(f, "Password is too weak: {}", reason),
+            Self::InvalidDisplayName(reason) => write!(f, "Invalid display name: {}", reason),
             Self::UserNotFound => write!(f, "User not found"),
             Self::UserAlreadyExists => write!(f, "User already exists"),
+            Self::UserAlreadyDeleted => write!(f, "User account has already been deleted"),
             Self::InvalidCredentials => write!(f, "Invalid credentials"),
             Self::NoPasswordSet => write!(f, "No password set for this account"),
             Self::EmailAlreadyInUse => write!(f, "Email is already in use"),
