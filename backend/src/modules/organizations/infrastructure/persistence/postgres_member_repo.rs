@@ -213,12 +213,15 @@ impl OrganizationMemberRepository for PostgresOrganizationMemberRepository {
     }
 
     async fn count_owners_for_update(&self, org_id: &OrgId) -> Result<u32, OrgDomainError> {
-        // Use FOR UPDATE to lock rows and prevent race conditions
+        // Use FOR UPDATE in subquery to lock rows and prevent race conditions
+        // PostgreSQL doesn't allow FOR UPDATE with aggregate functions directly
         let count: (i64,) = sqlx::query_as(
             r#"
-            SELECT COUNT(*) FROM organization_members
-            WHERE organization_id = $1 AND role = 'owner'
-            FOR UPDATE
+            SELECT COUNT(*) FROM (
+                SELECT 1 FROM organization_members
+                WHERE organization_id = $1 AND role = 'owner'
+                FOR UPDATE
+            ) AS locked_rows
             "#,
         )
         .bind(org_id.as_str())

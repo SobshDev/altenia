@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 
-use super::value_objects::{Email, PasswordHash, UserId};
+use super::value_objects::{DisplayName, Email, PasswordHash, UserId};
+use crate::modules::auth::domain::errors::AuthDomainError;
 
 /// User aggregate root
 #[derive(Debug, Clone)]
@@ -8,8 +9,10 @@ pub struct User {
     id: UserId,
     email: Email,
     password_hash: Option<PasswordHash>, // None for OAuth-only users
+    display_name: Option<DisplayName>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    deleted_at: Option<DateTime<Utc>>,
 }
 
 impl User {
@@ -20,8 +23,10 @@ impl User {
             id,
             email,
             password_hash: Some(password_hash),
+            display_name: None,
             created_at: now,
             updated_at: now,
+            deleted_at: None,
         }
     }
 
@@ -32,8 +37,10 @@ impl User {
             id,
             email,
             password_hash: None,
+            display_name: None,
             created_at: now,
             updated_at: now,
+            deleted_at: None,
         }
     }
 
@@ -42,15 +49,19 @@ impl User {
         id: UserId,
         email: Email,
         password_hash: Option<PasswordHash>,
+        display_name: Option<DisplayName>,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
+        deleted_at: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             id,
             email,
             password_hash,
+            display_name,
             created_at,
             updated_at,
+            deleted_at,
         }
     }
 
@@ -75,9 +86,53 @@ impl User {
         self.updated_at
     }
 
+    pub fn deleted_at(&self) -> Option<DateTime<Utc>> {
+        self.deleted_at
+    }
+
+    pub fn display_name(&self) -> Option<&DisplayName> {
+        self.display_name.as_ref()
+    }
+
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_at.is_some()
+    }
+
     // Domain behavior
     pub fn has_password(&self) -> bool {
         self.password_hash.is_some()
+    }
+
+    pub fn has_display_name(&self) -> bool {
+        self.display_name.is_some()
+    }
+
+    /// Update the user's email
+    pub fn update_email(&mut self, new_email: Email) {
+        self.email = new_email;
+        self.updated_at = Utc::now();
+    }
+
+    /// Update the user's password
+    pub fn update_password(&mut self, new_password_hash: PasswordHash) {
+        self.password_hash = Some(new_password_hash);
+        self.updated_at = Utc::now();
+    }
+
+    /// Update the user's display name
+    pub fn update_display_name(&mut self, new_display_name: DisplayName) {
+        self.display_name = Some(new_display_name);
+        self.updated_at = Utc::now();
+    }
+
+    /// Soft delete the user (data retained for 30 days)
+    pub fn soft_delete(&mut self) -> Result<(), AuthDomainError> {
+        if self.deleted_at.is_some() {
+            return Err(AuthDomainError::UserAlreadyDeleted);
+        }
+        self.deleted_at = Some(Utc::now());
+        self.updated_at = Utc::now();
+        Ok(())
     }
 }
 
@@ -147,11 +202,39 @@ mod tests {
         let created_at = Utc::now();
         let updated_at = Utc::now();
 
-        let user = User::reconstruct(id, email, password_hash, created_at, updated_at);
+        let user = User::reconstruct(id, email, password_hash, None, created_at, updated_at, None);
 
         assert_eq!(user.id().as_str(), "test-user-id");
         assert!(user.has_password());
         assert_eq!(user.created_at(), created_at);
         assert_eq!(user.updated_at(), updated_at);
+        assert!(!user.is_deleted());
+    }
+
+    #[test]
+    fn test_soft_delete() {
+        let id = create_test_user_id();
+        let email = create_test_email();
+        let password_hash = create_test_password_hash();
+        let mut user = User::new(id, email, password_hash);
+
+        assert!(!user.is_deleted());
+        assert!(user.soft_delete().is_ok());
+        assert!(user.is_deleted());
+        assert!(user.deleted_at().is_some());
+    }
+
+    #[test]
+    fn test_cannot_delete_twice() {
+        let id = create_test_user_id();
+        let email = create_test_email();
+        let password_hash = create_test_password_hash();
+        let mut user = User::new(id, email, password_hash);
+
+        user.soft_delete().unwrap();
+        assert!(matches!(
+            user.soft_delete(),
+            Err(AuthDomainError::UserAlreadyDeleted)
+        ));
     }
 }

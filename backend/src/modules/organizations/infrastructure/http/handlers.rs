@@ -62,6 +62,7 @@ pub struct MemberResponseDto {
     pub id: String,
     pub user_id: String,
     pub email: String,
+    pub display_name: Option<String>,
     pub role: String,
     pub joined_at: DateTime<Utc>,
 }
@@ -100,6 +101,7 @@ impl From<MemberResponse> for MemberResponseDto {
             id: r.id,
             user_id: r.user_id,
             email: r.email,
+            display_name: r.display_name,
             role: r.role,
             joined_at: r.joined_at,
         }
@@ -484,7 +486,7 @@ pub async fn transfer_ownership<OR, MR, UR, TS, ID>(
     Extension(claims): Extension<AuthClaims>,
     Path(org_id): Path<String>,
     Json(req): Json<TransferOwnershipRequest>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+) -> Result<Json<SwitchOrgResponseDto>, (StatusCode, Json<ErrorResponse>)>
 where
     OR: OrganizationRepository,
     MR: OrganizationMemberRepository,
@@ -501,7 +503,7 @@ where
     org_service
         .transfer_ownership(cmd)
         .await
-        .map(|_| StatusCode::NO_CONTENT)
+        .map(|r| Json(r.into()))
         .map_err(to_error_response)
 }
 

@@ -1,6 +1,6 @@
 use axum::{
     middleware,
-    routing::{get, post},
+    routing::{delete, get, patch, post},
     Router,
 };
 use std::sync::Arc;
@@ -41,7 +41,23 @@ where
     // Protected routes (require authentication, no rate limiting needed)
     let protected_routes = Router::new()
         .route("/logout", post(handlers::logout::<U, T, P, TS, ID, OR, MR>))
-        .route("/me", get(handlers::me::<U, T, P, TS, ID, OR, MR>))
+        .route(
+            "/me",
+            get(handlers::me::<U, T, P, TS, ID, OR, MR>)
+                .delete(handlers::delete_account::<U, T, P, TS, ID, OR, MR>),
+        )
+        .route(
+            "/me/email",
+            patch(handlers::change_email::<U, T, P, TS, ID, OR, MR>),
+        )
+        .route(
+            "/me/password",
+            patch(handlers::change_password::<U, T, P, TS, ID, OR, MR>),
+        )
+        .route(
+            "/me/display-name",
+            patch(handlers::update_display_name::<U, T, P, TS, ID, OR, MR>),
+        )
         .layer(middleware::from_fn_with_state(
             token_service,
             auth_middleware::<TS>,

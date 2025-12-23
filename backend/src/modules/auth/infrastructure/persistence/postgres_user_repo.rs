@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::models::UserRow;
 use crate::modules::auth::domain::{
-    AuthDomainError, Email, PasswordHash, User, UserId, UserRepository,
+    AuthDomainError, DisplayName, Email, PasswordHash, User, UserId, UserRepository,
 };
 
 /// PostgreSQL implementation of UserRepository
@@ -21,13 +21,19 @@ impl PostgresUserRepository {
         let email = Email::new(row.email)?;
         let user_id = UserId::new(row.id);
         let password_hash = row.password_hash.map(PasswordHash::from_hash);
+        let display_name = row
+            .display_name
+            .map(DisplayName::new)
+            .transpose()?;
 
         Ok(User::reconstruct(
             user_id,
             email,
             password_hash,
+            display_name,
             row.created_at,
             row.updated_at,
+            row.deleted_at,
         ))
     }
 }
@@ -37,9 +43,9 @@ impl UserRepository for PostgresUserRepository {
     async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, AuthDomainError> {
         let row: Option<UserRow> = sqlx::query_as(
             r#"
-            SELECT id, email, password_hash, created_at, updated_at
+            SELECT id, email, password_hash, display_name, created_at, updated_at, deleted_at
             FROM users
-            WHERE id = $1
+            WHERE id = $1 AND deleted_at IS NULL
             "#,
         )
         .bind(id.as_str())
@@ -53,9 +59,9 @@ impl UserRepository for PostgresUserRepository {
     async fn find_by_email(&self, email: &Email) -> Result<Option<User>, AuthDomainError> {
         let row: Option<UserRow> = sqlx::query_as(
             r#"
-            SELECT id, email, password_hash, created_at, updated_at
+            SELECT id, email, password_hash, display_name, created_at, updated_at, deleted_at
             FROM users
-            WHERE email = $1
+            WHERE email = $1 AND deleted_at IS NULL
             "#,
         )
         .bind(email.as_str())
@@ -69,19 +75,23 @@ impl UserRepository for PostgresUserRepository {
     async fn save(&self, user: &User) -> Result<(), AuthDomainError> {
         sqlx::query(
             r#"
-            INSERT INTO users (id, email, password_hash, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO users (id, email, password_hash, display_name, created_at, updated_at, deleted_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (id) DO UPDATE SET
                 email = EXCLUDED.email,
                 password_hash = EXCLUDED.password_hash,
-                updated_at = EXCLUDED.updated_at
+                display_name = EXCLUDED.display_name,
+                updated_at = EXCLUDED.updated_at,
+                deleted_at = EXCLUDED.deleted_at
             "#,
         )
         .bind(user.id().as_str())
         .bind(user.email().as_str())
         .bind(user.password_hash().map(|h| h.as_str()))
+        .bind(user.display_name().map(|d| d.as_str()))
         .bind(user.created_at())
         .bind(user.updated_at())
+        .bind(user.deleted_at())
         .execute(self.pool.as_ref())
         .await
         .map_err(|e| AuthDomainError::InternalError(e.to_string()))?;
@@ -92,7 +102,7 @@ impl UserRepository for PostgresUserRepository {
     async fn exists_by_email(&self, email: &Email) -> Result<bool, AuthDomainError> {
         let count: (i64,) = sqlx::query_as(
             r#"
-            SELECT COUNT(*) FROM users WHERE email = $1
+            SELECT COUNT(*) FROM users WHERE email = $1 AND deleted_at IS NULL
             "#,
         )
         .bind(email.as_str())

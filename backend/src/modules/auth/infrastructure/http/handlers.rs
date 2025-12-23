@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use super::extractors::AuthClaims;
 use crate::modules::auth::application::{
-    AuthResponse, AuthService, LoginCommand, LogoutCommand, RefreshTokenCommand,
-    RegisterUserCommand,
+    AuthResponse, AuthService, ChangeEmailCommand, ChangePasswordCommand, DeleteAccountCommand,
+    LoginCommand, LogoutCommand, RefreshTokenCommand, RegisterUserCommand, UpdateDisplayNameCommand,
 };
 use crate::modules::auth::domain::{
     AuthDomainError, PasswordHasher, RefreshTokenRepository, UserRepository,
@@ -82,10 +82,33 @@ pub struct LogoutRequest {
     pub refresh_token: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChangeEmailRequest {
+    pub current_password: String,
+    pub new_email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteAccountRequest {
+    pub current_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateDisplayNameRequest {
+    pub display_name: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct AuthResponseDto {
     pub user_id: String,
     pub email: String,
+    pub display_name: Option<String>,
     pub access_token: String,
     pub refresh_token: String,
     pub token_type: String,
@@ -96,6 +119,7 @@ pub struct AuthResponseDto {
 pub struct UserResponseDto {
     pub id: String,
     pub email: String,
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -109,6 +133,7 @@ impl From<AuthResponse> for AuthResponseDto {
         Self {
             user_id: r.user_id,
             email: r.email,
+            display_name: r.display_name,
             access_token: r.access_token,
             refresh_token: r.refresh_token,
             token_type: r.token_type,
@@ -123,7 +148,9 @@ impl From<AuthResponse> for AuthResponseDto {
 
 fn to_error_response(e: AuthDomainError) -> (StatusCode, Json<ErrorResponse>) {
     match e {
-        AuthDomainError::InvalidEmail(_) | AuthDomainError::InvalidPassword(_) => (
+        AuthDomainError::InvalidEmail(_)
+        | AuthDomainError::InvalidPassword(_)
+        | AuthDomainError::InvalidDisplayName(_) => (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 error: e.to_string(),
@@ -151,11 +178,32 @@ fn to_error_response(e: AuthDomainError) -> (StatusCode, Json<ErrorResponse>) {
                 code: "USER_NOT_FOUND".to_string(),
             }),
         ),
+        AuthDomainError::UserAlreadyDeleted => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Account has already been deleted".to_string(),
+                code: "USER_ALREADY_DELETED".to_string(),
+            }),
+        ),
         AuthDomainError::InvalidCredentials => (
             StatusCode::UNAUTHORIZED,
             Json(ErrorResponse {
                 error: "Invalid credentials".to_string(),
                 code: "INVALID_CREDENTIALS".to_string(),
+            }),
+        ),
+        AuthDomainError::NoPasswordSet => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "This account does not have a password set".to_string(),
+                code: "NO_PASSWORD_SET".to_string(),
+            }),
+        ),
+        AuthDomainError::EmailAlreadyInUse => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "Email is already in use".to_string(),
+                code: "EMAIL_IN_USE".to_string(),
             }),
         ),
         AuthDomainError::TokenExpired => (
@@ -326,7 +374,118 @@ where
             Json(UserResponseDto {
                 id: user.id().as_str().to_string(),
                 email: user.email().as_str().to_string(),
+                display_name: user.display_name().map(|d| d.as_str().to_string()),
             })
         })
+        .map_err(to_error_response)
+}
+
+/// PATCH /api/auth/me/email (protected)
+pub async fn change_email<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req): Json<ChangeEmailRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+where
+    U: UserRepository,
+    T: RefreshTokenRepository,
+    P: PasswordHasher,
+    TS: TokenService,
+    ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+{
+    let cmd = ChangeEmailCommand {
+        user_id: claims.user_id,
+        current_password: req.current_password,
+        new_email: req.new_email,
+    };
+
+    auth_service
+        .change_email(cmd)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(to_error_response)
+}
+
+/// PATCH /api/auth/me/password (protected)
+pub async fn change_password<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req): Json<ChangePasswordRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+where
+    U: UserRepository,
+    T: RefreshTokenRepository,
+    P: PasswordHasher,
+    TS: TokenService,
+    ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+{
+    let cmd = ChangePasswordCommand {
+        user_id: claims.user_id,
+        current_password: req.current_password,
+        new_password: req.new_password,
+    };
+
+    auth_service
+        .change_password(cmd)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(to_error_response)
+}
+
+/// PATCH /api/auth/me/display-name (protected)
+pub async fn update_display_name<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req): Json<UpdateDisplayNameRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+where
+    U: UserRepository,
+    T: RefreshTokenRepository,
+    P: PasswordHasher,
+    TS: TokenService,
+    ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+{
+    let cmd = UpdateDisplayNameCommand {
+        user_id: claims.user_id,
+        display_name: req.display_name,
+    };
+
+    auth_service
+        .update_display_name(cmd)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(to_error_response)
+}
+
+/// DELETE /api/auth/me (protected)
+pub async fn delete_account<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req): Json<DeleteAccountRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+where
+    U: UserRepository,
+    T: RefreshTokenRepository,
+    P: PasswordHasher,
+    TS: TokenService,
+    ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+{
+    let cmd = DeleteAccountCommand {
+        user_id: claims.user_id,
+        current_password: req.current_password,
+    };
+
+    auth_service
+        .delete_account(cmd)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
         .map_err(to_error_response)
 }

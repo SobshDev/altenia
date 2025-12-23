@@ -99,6 +99,7 @@ pub struct MemberResponse {
     pub id: String,
     pub user_id: String,
     pub email: String,
+    pub display_name: Option<String>,
     pub role: String,
     pub joined_at: DateTime<Utc>,
 }

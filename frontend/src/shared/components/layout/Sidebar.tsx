@@ -3,14 +3,12 @@ import {
   PanelLeftClose,
   PanelLeft,
   Settings,
+  Users,
   LayoutDashboard,
-  FileText,
-  Activity,
-  GitBranch,
-  Bell,
 } from 'lucide-react';
 import { useSidebarStore } from '@/stores/sidebarStore';
 import { Tooltip } from '@/shared/components/Tooltip';
+import { OrgSelector } from '@/shared/components/OrgSelector';
 
 interface NavItem {
   label: string;
@@ -20,14 +18,11 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { label: 'Logs', href: '/logs', icon: FileText },
-  { label: 'Metrics', href: '/metrics', icon: Activity },
-  { label: 'Traces', href: '/traces', icon: GitBranch },
-  { label: 'Alerts', href: '/alerts', icon: Bell },
+  { label: 'Organization', href: '/settings/organization', icon: Users },
 ];
 
 const bottomNavItems: NavItem[] = [
-  { label: 'Settings', href: '/settings/account', icon: Settings },
+  { label: 'Account', href: '/settings/account', icon: Settings },
 ];
 
 function Logo({
@@ -125,6 +120,11 @@ export function Sidebar() {
         >
           <PanelLeftClose className="w-5 h-5" />
         </button>
+      </div>
+
+      {/* Organization selector */}
+      <div className="p-3 border-b border-border overflow-hidden">
+        <OrgSelector collapsed={isCollapsed} />
       </div>
 
       {/* Main navigation */}
