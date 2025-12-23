@@ -2,16 +2,18 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     container_name: altenia-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-altenia}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-altenia_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-altenia}
+    # Ensure TimescaleDB is preloaded (required for CREATE EXTENSION)
+    command: postgres -c shared_preload_libraries=timescaledb
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../backend/migrations:/docker-entrypoint-initdb.d:ro
+      # Note: Migrations are now handled by the backend on startup
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-altenia} -d ${POSTGRES_DB:-altenia}"]
       interval: 5s

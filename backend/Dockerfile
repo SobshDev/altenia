@@ -25,19 +25,23 @@ RUN cargo build --release
 # Runtime stage
 FROM alpine:3.19
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates libgcc
+# Install runtime dependencies (postgresql-client for migrations)
+RUN apk add --no-cache ca-certificates libgcc postgresql-client bash
 
 WORKDIR /app
 
 # Copy the binary from builder
 COPY --from=builder /app/target/release/altenia-backend /app/altenia-backend
 
-# Copy migrations (for reference, though they run via init scripts)
+# Copy migrations
 COPY migrations ./migrations
+
+# Copy and prepare scripts
+COPY scripts ./scripts
+RUN chmod +x ./scripts/*.sh
 
 # Expose port
 EXPOSE 3000
 
-# Run the binary
-CMD ["./altenia-backend"]
+# Use entrypoint script to run migrations before starting
+CMD ["./scripts/docker-entrypoint.sh"]

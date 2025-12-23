@@ -22,6 +22,17 @@ use crate::modules::organizations::{
     application::services::OrgService,
     infrastructure::{org_routes, PostgresOrganizationMemberRepository, PostgresOrganizationRepository},
 };
+use crate::modules::projects::{
+    application::ProjectService,
+    infrastructure::{project_routes, PostgresApiKeyRepository, PostgresProjectRepository},
+};
+use crate::modules::logging::{
+    application::LogService,
+    infrastructure::{
+        ingest_routes, log_query_routes, sse_routes, start_cleanup_task, start_log_listener,
+        LogBroadcaster, TimescaleLogRepository,
+    },
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -95,12 +106,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create organization service
     let org_service = Arc::new(OrgService::new(
-        org_repo,
-        member_repo,
+        org_repo.clone(),
+        member_repo.clone(),
         user_repo,
         token_service.clone(),
+        id_generator.clone(),
+    ));
+
+    // Create project repositories
+    let project_repo = Arc::new(PostgresProjectRepository::new(pool.clone()));
+    let api_key_repo = Arc::new(PostgresApiKeyRepository::new(pool.clone()));
+
+    // Create project service
+    let project_service = Arc::new(ProjectService::new(
+        project_repo.clone(),
+        api_key_repo.clone(),
+        org_repo.clone(),
+        member_repo.clone(),
+        id_generator.clone(),
+    ));
+
+    // Create logging infrastructure
+    let log_repo = Arc::new(TimescaleLogRepository::new(pool.clone()));
+    let log_broadcaster = Arc::new(LogBroadcaster::new(1000)); // Buffer up to 1000 messages per channel
+
+    // Create log service
+    let log_service = Arc::new(LogService::new(
+        log_repo,
+        project_repo.clone(),
+        member_repo.clone(),
         id_generator,
     ));
+
+    // Spawn log listener background task (listens to pg_notify for real-time streaming)
+    {
+        let listener_pool = pool.clone();
+        let listener_broadcaster = log_broadcaster.clone();
+        tokio::spawn(async move {
+            if let Err(e) = start_log_listener(listener_pool, listener_broadcaster).await {
+                tracing::error!(error = %e, "Log listener failed");
+            }
+        });
+        tracing::info!("Log listener started (listening for PostgreSQL NOTIFY events)");
+    }
+
+    // Spawn broadcaster cleanup task
+    {
+        let cleanup_broadcaster = log_broadcaster.clone();
+        tokio::spawn(start_cleanup_task(cleanup_broadcaster));
+        tracing::info!("Log broadcaster cleanup task started");
+    }
 
     // Create rate limiter (10 requests per minute per IP)
     let rate_limiter = Arc::new(IpRateLimiter::new(10));
@@ -121,7 +176,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create router
     let app = Router::new()
         .nest("/api/auth", auth_routes(auth_service, token_service.clone(), rate_limiter))
-        .nest("/api", org_routes(org_service, token_service))
+        .nest("/api", org_routes(org_service, token_service.clone()))
+        .nest("/api", project_routes(project_service.clone(), token_service.clone()))
+        // Logging routes
+        .nest("/api/v1", ingest_routes(log_service.clone(), project_service))
+        .nest("/api", log_query_routes(log_service, token_service.clone()))
+        .nest("/api", sse_routes(
+            log_broadcaster,
+            project_repo,
+            member_repo,
+            token_service,
+        ))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
