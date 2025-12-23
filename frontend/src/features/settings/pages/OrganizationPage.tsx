@@ -30,30 +30,45 @@ export function OrganizationPage() {
         </p>
       </div>
 
-      <div className="flex flex-col xl:flex-row gap-8">
-        {/* Left column - Settings */}
-        <div className="flex-1 max-w-2xl space-y-6">
-          {/* General Section */}
-          <SectionCard
-            icon={Building2}
-            title="General"
-            description="Organization name and details"
-            staggerDelay={100}
-          >
-            <ChangeOrgNameForm />
-          </SectionCard>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* General Section */}
+        <SectionCard
+          icon={Building2}
+          title="General"
+          description="Organization name and details"
+          staggerDelay={100}
+        >
+          <ChangeOrgNameForm />
+        </SectionCard>
 
-          {/* Members Section */}
-          <SectionCard
-            icon={Users}
-            title="Members"
-            description="Manage organization members and their roles"
-            staggerDelay={200}
-          >
-            <MembersSection />
-          </SectionCard>
+        {/* Overview */}
+        <div
+          className="animate-fade-in-up"
+          style={{ '--stagger': '100ms' } as React.CSSProperties}
+        >
+          <OrganizationOverview />
+        </div>
 
-          {/* Danger Zone */}
+        {/* Members Section */}
+        <SectionCard
+          icon={Users}
+          title="Members"
+          description="Manage organization members and their roles"
+          staggerDelay={200}
+        >
+          <MembersSection />
+        </SectionCard>
+
+        {/* Activity Feed */}
+        <div
+          className="animate-fade-in-up"
+          style={{ '--stagger': '200ms' } as React.CSSProperties}
+        >
+          <ActivityFeed />
+        </div>
+
+        {/* Danger Zone - Full width at bottom */}
+        <div className="lg:col-span-2">
           <SectionCard
             icon={AlertTriangle}
             title="Danger Zone"
@@ -65,15 +80,6 @@ export function OrganizationPage() {
               <LeaveOrgSection />
             </div>
           </SectionCard>
-        </div>
-
-        {/* Right column - Overview & Activity */}
-        <div
-          className="w-full xl:flex-1 space-y-6 animate-fade-in-up"
-          style={{ '--stagger': '100ms' } as React.CSSProperties}
-        >
-          <OrganizationOverview />
-          <ActivityFeed />
         </div>
       </div>
     </div>
