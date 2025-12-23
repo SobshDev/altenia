@@ -61,7 +61,7 @@ mod tests {
     #[tokio::test]
     async fn test_hash_and_verify() {
         let hasher = Argon2PasswordHasher::new();
-        let password = PlainPassword::new("password123".to_string()).unwrap();
+        let password = PlainPassword::new("Password123!".to_string()).unwrap();
 
         let hash = hasher.hash(&password).await.unwrap();
 
@@ -71,8 +71,8 @@ mod tests {
     #[tokio::test]
     async fn test_wrong_password() {
         let hasher = Argon2PasswordHasher::new();
-        let password = PlainPassword::new("password123".to_string()).unwrap();
-        let wrong_password = PlainPassword::new("wrongpassword".to_string()).unwrap();
+        let password = PlainPassword::new("Password123!".to_string()).unwrap();
+        let wrong_password = PlainPassword::new("WrongPass456!".to_string()).unwrap();
 
         let hash = hasher.hash(&password).await.unwrap();
 

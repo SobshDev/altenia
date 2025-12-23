@@ -86,10 +86,10 @@ fn to_error_response(e: AuthDomainError) -> (StatusCode, Json<ErrorResponse>) {
                 code: "VALIDATION_ERROR".to_string(),
             }),
         ),
-        AuthDomainError::WeakPassword => (
+        AuthDomainError::WeakPassword(ref reason) => (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                error: e.to_string(),
+                error: format!("Password is too weak: {}", reason),
                 code: "WEAK_PASSWORD".to_string(),
             }),
         ),
@@ -128,13 +128,16 @@ fn to_error_response(e: AuthDomainError) -> (StatusCode, Json<ErrorResponse>) {
                 code: "INVALID_TOKEN".to_string(),
             }),
         ),
-        AuthDomainError::InternalError(msg) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: msg,
-                code: "INTERNAL_ERROR".to_string(),
-            }),
-        ),
+        AuthDomainError::InternalError(ref msg) => {
+            tracing::error!(error = %msg, "Internal error occurred");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "An internal error occurred. Please try again later.".to_string(),
+                    code: "INTERNAL_ERROR".to_string(),
+                }),
+            )
+        }
     }
 }
 

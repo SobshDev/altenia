@@ -7,5 +7,5 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Index for email lookups
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+-- Case-insensitive unique index for email lookups
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email));

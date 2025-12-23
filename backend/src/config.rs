@@ -6,6 +6,7 @@ pub struct Config {
     pub database_url: String,
     pub jwt_access_secret: String,
     pub jwt_refresh_secret: String,
+    pub refresh_token_duration_days: i64,
     pub host: String,
     pub port: u16,
 }
@@ -22,6 +23,10 @@ impl Config {
                 .map_err(|_| ConfigError::MissingEnv("JWT_ACCESS_SECRET"))?,
             jwt_refresh_secret: env::var("JWT_REFRESH_SECRET")
                 .map_err(|_| ConfigError::MissingEnv("JWT_REFRESH_SECRET"))?,
+            refresh_token_duration_days: env::var("REFRESH_TOKEN_DURATION_DAYS")
+                .unwrap_or_else(|_| "7".to_string())
+                .parse()
+                .map_err(|_| ConfigError::InvalidValue("REFRESH_TOKEN_DURATION_DAYS"))?,
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "3000".to_string())

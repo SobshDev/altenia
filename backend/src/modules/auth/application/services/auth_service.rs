@@ -25,7 +25,8 @@ where
     password_hasher: Arc<P>,
     token_service: Arc<TS>,
     id_generator: Arc<ID>,
-    refresh_token_duration_days: i64,
+    /// Pre-computed dummy hash for timing attack mitigation
+    dummy_password_hash: PasswordHash,
 }
 
 impl<U, T, P, TS, ID> AuthService<U, T, P, TS, ID>
@@ -43,13 +44,19 @@ where
         token_service: Arc<TS>,
         id_generator: Arc<ID>,
     ) -> Self {
+        // Pre-computed Argon2 hash for timing attack mitigation
+        // This ensures login takes consistent time whether user exists or not
+        let dummy_password_hash = PasswordHash::from_hash(
+            "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string()
+        );
+
         Self {
             user_repo,
             token_repo,
             password_hasher,
             token_service,
             id_generator,
-            refresh_token_duration_days: 7,
+            dummy_password_hash,
         }
     }
 
@@ -99,34 +106,40 @@ where
         let email = Email::new(cmd.email)?;
         let password = PlainPassword::new(cmd.password)?;
 
-        // 2. Find user
-        let user = self
-            .user_repo
-            .find_by_email(&email)
-            .await?
-            .ok_or(AuthDomainError::InvalidCredentials)?;
+        // 2. Find user (don't early-return to prevent timing attacks)
+        let user_opt = self.user_repo.find_by_email(&email).await?;
 
-        // 3. Verify password
-        let password_hash = user
-            .password_hash()
-            .ok_or(AuthDomainError::InvalidCredentials)?;
+        // 3. Get password hash or use dummy for timing consistency
+        let (user, password_hash) = match &user_opt {
+            Some(user) => {
+                let hash = user
+                    .password_hash()
+                    .cloned()
+                    .unwrap_or_else(|| self.dummy_password_hash.clone());
+                (Some(user), hash)
+            }
+            None => (None, self.dummy_password_hash.clone()),
+        };
 
+        // 4. Always verify password (timing-safe: takes same time regardless of user existence)
         let is_valid = self
             .password_hasher
-            .verify(&password, password_hash)
+            .verify(&password, &password_hash)
             .await?;
 
-        if !is_valid {
-            return Err(AuthDomainError::InvalidCredentials);
-        }
+        // 5. Check both user existence AND password validity
+        let user = match (user, is_valid) {
+            (Some(u), true) => u,
+            _ => return Err(AuthDomainError::InvalidCredentials),
+        };
 
-        // 4. Generate tokens
+        // 6. Generate tokens
         let token_pair = self
             .token_service
             .generate_token_pair(user.id(), user.email().as_str())
             .await?;
 
-        // 5. Store refresh token
+        // 7. Store refresh token
         self.store_refresh_token(user.id(), &token_pair.refresh_token, token_pair.refresh_expires_in)
             .await?;
 
@@ -497,7 +510,7 @@ mod tests {
 
         let cmd = RegisterUserCommand {
             email: "newuser@example.com".to_string(),
-            password: "securepassword123".to_string(),
+            password: "SecurePass123!".to_string(),
         };
 
         let result = service.register(cmd).await;
@@ -516,7 +529,7 @@ mod tests {
 
         let cmd = RegisterUserCommand {
             email: "existing@example.com".to_string(),
-            password: "securepassword123".to_string(),
+            password: "SecurePass123!".to_string(),
         };
 
         let result = service.register(cmd).await;
@@ -530,7 +543,7 @@ mod tests {
 
         let cmd = RegisterUserCommand {
             email: "invalid-email".to_string(),
-            password: "securepassword123".to_string(),
+            password: "SecurePass123!".to_string(),
         };
 
         let result = service.register(cmd).await;
@@ -549,19 +562,19 @@ mod tests {
 
         let result = service.register(cmd).await;
 
-        assert!(matches!(result, Err(AuthDomainError::WeakPassword)));
+        assert!(matches!(result, Err(AuthDomainError::WeakPassword(_))));
     }
 
     // ==================== Login Tests ====================
 
     #[tokio::test]
     async fn test_login_success() {
-        let user = create_test_user("user-1", "test@example.com", "correctpassword");
+        let user = create_test_user("user-1", "test@example.com", "CorrectPass1!");
         let service = create_auth_service_with_user(user);
 
         let cmd = LoginCommand {
             email: "test@example.com".to_string(),
-            password: "correctpassword".to_string(),
+            password: "CorrectPass1!".to_string(),
         };
 
         let result = service.login(cmd).await;
@@ -574,12 +587,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_login_wrong_password() {
-        let user = create_test_user("user-1", "test@example.com", "correctpassword");
+        let user = create_test_user("user-1", "test@example.com", "CorrectPass1!");
         let service = create_auth_service_with_user(user);
 
         let cmd = LoginCommand {
             email: "test@example.com".to_string(),
-            password: "wrongpassword".to_string(),
+            password: "WrongPass1!".to_string(),
         };
 
         let result = service.login(cmd).await;
@@ -593,7 +606,7 @@ mod tests {
 
         let cmd = LoginCommand {
             email: "nonexistent@example.com".to_string(),
-            password: "somepassword".to_string(),
+            password: "SomePass1!".to_string(),
         };
 
         let result = service.login(cmd).await;
@@ -607,7 +620,7 @@ mod tests {
 
         let cmd = LoginCommand {
             email: "not-an-email".to_string(),
-            password: "somepassword".to_string(),
+            password: "SomePass1!".to_string(),
         };
 
         let result = service.login(cmd).await;

@@ -80,9 +80,40 @@ pub struct PlainPassword(String);
 
 impl PlainPassword {
     pub fn new(password: String) -> Result<Self, AuthDomainError> {
-        // Password strength validation
+        // Minimum 8 characters
         if password.len() < 8 {
-            return Err(AuthDomainError::WeakPassword);
+            return Err(AuthDomainError::WeakPassword(
+                "must be at least 8 characters".to_string(),
+            ));
+        }
+
+        // Must contain uppercase
+        if !password.chars().any(|c| c.is_uppercase()) {
+            return Err(AuthDomainError::WeakPassword(
+                "must contain at least one uppercase letter".to_string(),
+            ));
+        }
+
+        // Must contain lowercase
+        if !password.chars().any(|c| c.is_lowercase()) {
+            return Err(AuthDomainError::WeakPassword(
+                "must contain at least one lowercase letter".to_string(),
+            ));
+        }
+
+        // Must contain digit
+        if !password.chars().any(|c| c.is_ascii_digit()) {
+            return Err(AuthDomainError::WeakPassword(
+                "must contain at least one digit".to_string(),
+            ));
+        }
+
+        // Must contain special character
+        const SPECIAL_CHARS: &str = "!@#$%^&*()_+-=[]{}|;':\",./<>?`~";
+        if !password.chars().any(|c| SPECIAL_CHARS.contains(c)) {
+            return Err(AuthDomainError::WeakPassword(
+                "must contain at least one special character".to_string(),
+            ));
         }
 
         Ok(Self(password))
@@ -119,13 +150,38 @@ mod tests {
 
     #[test]
     fn test_valid_password() {
-        assert!(PlainPassword::new("password123".to_string()).is_ok());
-        assert!(PlainPassword::new("12345678".to_string()).is_ok());
+        assert!(PlainPassword::new("Password1!".to_string()).is_ok());
+        assert!(PlainPassword::new("Str0ng@Pass".to_string()).is_ok());
+        assert!(PlainPassword::new("Complex1$Password".to_string()).is_ok());
     }
 
     #[test]
-    fn test_weak_password() {
-        assert!(PlainPassword::new("short".to_string()).is_err());
-        assert!(PlainPassword::new("1234567".to_string()).is_err());
+    fn test_weak_password_too_short() {
+        let result = PlainPassword::new("Pass1!".to_string());
+        assert!(matches!(result, Err(AuthDomainError::WeakPassword(msg)) if msg.contains("8 characters")));
+    }
+
+    #[test]
+    fn test_weak_password_no_uppercase() {
+        let result = PlainPassword::new("password1!".to_string());
+        assert!(matches!(result, Err(AuthDomainError::WeakPassword(msg)) if msg.contains("uppercase")));
+    }
+
+    #[test]
+    fn test_weak_password_no_lowercase() {
+        let result = PlainPassword::new("PASSWORD1!".to_string());
+        assert!(matches!(result, Err(AuthDomainError::WeakPassword(msg)) if msg.contains("lowercase")));
+    }
+
+    #[test]
+    fn test_weak_password_no_digit() {
+        let result = PlainPassword::new("Password!".to_string());
+        assert!(matches!(result, Err(AuthDomainError::WeakPassword(msg)) if msg.contains("digit")));
+    }
+
+    #[test]
+    fn test_weak_password_no_special_char() {
+        let result = PlainPassword::new("Password1".to_string());
+        assert!(matches!(result, Err(AuthDomainError::WeakPassword(msg)) if msg.contains("special")));
     }
 }

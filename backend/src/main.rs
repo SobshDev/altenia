@@ -12,9 +12,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::config::Config;
 use crate::modules::auth::{
     application::AuthService,
+    domain::RefreshTokenRepository,
     infrastructure::{
-        Argon2PasswordHasher, JwtConfig, JwtTokenService, PostgresRefreshTokenRepository,
-        PostgresUserRepository, UuidGenerator, auth_routes,
+        Argon2PasswordHasher, IpRateLimiter, JwtConfig, JwtTokenService,
+        PostgresRefreshTokenRepository, PostgresUserRepository, UuidGenerator, auth_routes,
     },
 };
 
@@ -45,12 +46,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let user_repo = Arc::new(PostgresUserRepository::new(pool.clone()));
     let token_repo = Arc::new(PostgresRefreshTokenRepository::new(pool.clone()));
     let password_hasher = Arc::new(Argon2PasswordHasher::new());
-    let jwt_config = JwtConfig::default_with_secrets(
+    let jwt_config = JwtConfig::new(
         config.jwt_access_secret.clone(),
         config.jwt_refresh_secret.clone(),
+        15 * 60, // 15 minutes for access token
+        config.refresh_token_duration_days * 24 * 60 * 60, // days to seconds
     );
     let token_service = Arc::new(JwtTokenService::new(jwt_config));
     let id_generator = Arc::new(UuidGenerator::new());
+
+    // Spawn background task for token cleanup
+    {
+        let cleanup_repo = token_repo.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60)); // 1 hour
+            loop {
+                interval.tick().await;
+                match cleanup_repo.delete_expired().await {
+                    Ok(count) if count > 0 => {
+                        tracing::info!(deleted_count = count, "Cleaned up expired refresh tokens");
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "Failed to clean up expired refresh tokens");
+                    }
+                    _ => {}
+                }
+            }
+        });
+        tracing::info!("Token cleanup task started (runs every hour)");
+    }
 
     // Create auth service
     let auth_service = Arc::new(AuthService::new(
@@ -61,9 +85,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         id_generator,
     ));
 
+    // Create rate limiter (10 requests per minute per IP)
+    let rate_limiter = Arc::new(IpRateLimiter::new(10));
+
     // Create router
     let app = Router::new()
-        .nest("/api/auth", auth_routes(auth_service, token_service))
+        .nest("/api/auth", auth_routes(auth_service, token_service, rate_limiter))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

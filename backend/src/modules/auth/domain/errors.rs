@@ -5,7 +5,7 @@ pub enum AuthDomainError {
     // Validation errors
     InvalidEmail(String),
     InvalidPassword(String),
-    WeakPassword,
+    WeakPassword(String),
 
     // User errors
     UserNotFound,
@@ -26,7 +26,7 @@ impl fmt::Display for AuthDomainError {
         match self {
             Self::InvalidEmail(email) => write!(f, "Invalid email: {}", email),
             Self::InvalidPassword(msg) => write!(f, "Invalid password: {}", msg),
-            Self::WeakPassword => write!(f, "Password is too weak (minimum 8 characters)"),
+            Self::WeakPassword(reason) => write!(f, "Password is too weak: {}", reason),
             Self::UserNotFound => write!(f, "User not found"),
             Self::UserAlreadyExists => write!(f, "User already exists"),
             Self::InvalidCredentials => write!(f, "Invalid credentials"),
