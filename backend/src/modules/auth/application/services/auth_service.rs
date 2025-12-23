@@ -225,3 +225,554 @@ where
         self.token_repo.save(&token).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::modules::auth::application::ports::{TokenClaims, TokenPair};
+    use crate::modules::auth::domain::PasswordHasher;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    // ==================== Mock Implementations ====================
+
+    /// Mock User Repository
+    struct MockUserRepository {
+        users: Mutex<HashMap<String, User>>,
+    }
+
+    impl MockUserRepository {
+        fn new() -> Self {
+            Self {
+                users: Mutex::new(HashMap::new()),
+            }
+        }
+
+        fn with_user(user: User) -> Self {
+            let repo = Self::new();
+            repo.users.lock().unwrap().insert(user.email().as_str().to_string(), user);
+            repo
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl UserRepository for MockUserRepository {
+        async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, AuthDomainError> {
+            let users = self.users.lock().unwrap();
+            Ok(users.values().find(|u| u.id().as_str() == id.as_str()).cloned())
+        }
+
+        async fn find_by_email(&self, email: &Email) -> Result<Option<User>, AuthDomainError> {
+            let users = self.users.lock().unwrap();
+            Ok(users.get(email.as_str()).cloned())
+        }
+
+        async fn save(&self, user: &User) -> Result<(), AuthDomainError> {
+            let mut users = self.users.lock().unwrap();
+            users.insert(user.email().as_str().to_string(), user.clone());
+            Ok(())
+        }
+
+        async fn exists_by_email(&self, email: &Email) -> Result<bool, AuthDomainError> {
+            let users = self.users.lock().unwrap();
+            Ok(users.contains_key(email.as_str()))
+        }
+    }
+
+    /// Mock Refresh Token Repository
+    struct MockRefreshTokenRepository {
+        tokens: Mutex<HashMap<String, RefreshToken>>,
+    }
+
+    impl MockRefreshTokenRepository {
+        fn new() -> Self {
+            Self {
+                tokens: Mutex::new(HashMap::new()),
+            }
+        }
+
+        fn with_token(token: RefreshToken) -> Self {
+            let repo = Self::new();
+            repo.tokens.lock().unwrap().insert(token.token_hash().to_string(), token);
+            repo
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RefreshTokenRepository for MockRefreshTokenRepository {
+        async fn save(&self, token: &RefreshToken) -> Result<(), AuthDomainError> {
+            let mut tokens = self.tokens.lock().unwrap();
+            tokens.insert(token.token_hash().to_string(), token.clone());
+            Ok(())
+        }
+
+        async fn find_by_id(&self, id: &TokenId) -> Result<Option<RefreshToken>, AuthDomainError> {
+            let tokens = self.tokens.lock().unwrap();
+            Ok(tokens.values().find(|t| t.id().as_str() == id.as_str()).cloned())
+        }
+
+        async fn find_by_hash(&self, hash: &str) -> Result<Option<RefreshToken>, AuthDomainError> {
+            let tokens = self.tokens.lock().unwrap();
+            Ok(tokens.get(hash).cloned())
+        }
+
+        async fn revoke(&self, id: &TokenId) -> Result<(), AuthDomainError> {
+            let mut tokens = self.tokens.lock().unwrap();
+            if let Some(token) = tokens.values_mut().find(|t| t.id().as_str() == id.as_str()) {
+                token.revoke();
+            }
+            Ok(())
+        }
+
+        async fn revoke_all_for_user(&self, user_id: &UserId) -> Result<(), AuthDomainError> {
+            let mut tokens = self.tokens.lock().unwrap();
+            for token in tokens.values_mut() {
+                if token.user_id().as_str() == user_id.as_str() {
+                    token.revoke();
+                }
+            }
+            Ok(())
+        }
+
+        async fn delete_expired(&self) -> Result<u64, AuthDomainError> {
+            let mut tokens = self.tokens.lock().unwrap();
+            let before = tokens.len();
+            tokens.retain(|_, t| !t.is_expired());
+            Ok((before - tokens.len()) as u64)
+        }
+    }
+
+    /// Mock Password Hasher
+    struct MockPasswordHasher;
+
+    #[async_trait::async_trait]
+    impl PasswordHasher for MockPasswordHasher {
+        async fn hash(&self, password: &PlainPassword) -> Result<PasswordHash, AuthDomainError> {
+            Ok(PasswordHash::from_hash(format!("hashed_{}", password.as_str())))
+        }
+
+        async fn verify(
+            &self,
+            password: &PlainPassword,
+            hash: &PasswordHash,
+        ) -> Result<bool, AuthDomainError> {
+            Ok(hash.as_str() == format!("hashed_{}", password.as_str()))
+        }
+    }
+
+    /// Mock Token Service
+    struct MockTokenService {
+        should_fail_decode: bool,
+    }
+
+    impl MockTokenService {
+        fn new() -> Self {
+            Self { should_fail_decode: false }
+        }
+
+        fn failing_decode() -> Self {
+            Self { should_fail_decode: true }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl TokenService for MockTokenService {
+        async fn generate_token_pair(
+            &self,
+            user_id: &UserId,
+            email: &str,
+        ) -> Result<TokenPair, AuthDomainError> {
+            Ok(TokenPair {
+                access_token: format!("access_token_{}", user_id.as_str()),
+                refresh_token: format!("refresh_token_{}", user_id.as_str()),
+                access_expires_in: 900,
+                refresh_expires_in: 604800,
+            })
+        }
+
+        fn validate_access_token(&self, token: &str) -> Result<TokenClaims, AuthDomainError> {
+            if token.starts_with("access_token_") {
+                let user_id = token.replace("access_token_", "");
+                Ok(TokenClaims {
+                    user_id,
+                    email: "test@example.com".to_string(),
+                    exp: Utc::now().timestamp() + 900,
+                    iat: Utc::now().timestamp(),
+                })
+            } else {
+                Err(AuthDomainError::TokenInvalid)
+            }
+        }
+
+        fn decode_refresh_token(&self, token: &str) -> Result<TokenClaims, AuthDomainError> {
+            if self.should_fail_decode {
+                return Err(AuthDomainError::TokenInvalid);
+            }
+            if token.starts_with("refresh_token_") {
+                let user_id = token.replace("refresh_token_", "");
+                Ok(TokenClaims {
+                    user_id,
+                    email: "test@example.com".to_string(),
+                    exp: Utc::now().timestamp() + 604800,
+                    iat: Utc::now().timestamp(),
+                })
+            } else {
+                Err(AuthDomainError::TokenInvalid)
+            }
+        }
+
+        fn hash_refresh_token(&self, token: &str) -> String {
+            format!("hash_{}", token)
+        }
+    }
+
+    /// Mock ID Generator
+    struct MockIdGenerator {
+        counter: Mutex<u32>,
+    }
+
+    impl MockIdGenerator {
+        fn new() -> Self {
+            Self { counter: Mutex::new(0) }
+        }
+    }
+
+    impl IdGenerator for MockIdGenerator {
+        fn generate(&self) -> String {
+            let mut counter = self.counter.lock().unwrap();
+            *counter += 1;
+            format!("generated-id-{}", counter)
+        }
+    }
+
+    // ==================== Test Helpers ====================
+
+    fn create_auth_service() -> AuthService<
+        MockUserRepository,
+        MockRefreshTokenRepository,
+        MockPasswordHasher,
+        MockTokenService,
+        MockIdGenerator,
+    > {
+        AuthService::new(
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockRefreshTokenRepository::new()),
+            Arc::new(MockPasswordHasher),
+            Arc::new(MockTokenService::new()),
+            Arc::new(MockIdGenerator::new()),
+        )
+    }
+
+    fn create_auth_service_with_user(
+        user: User,
+    ) -> AuthService<
+        MockUserRepository,
+        MockRefreshTokenRepository,
+        MockPasswordHasher,
+        MockTokenService,
+        MockIdGenerator,
+    > {
+        AuthService::new(
+            Arc::new(MockUserRepository::with_user(user)),
+            Arc::new(MockRefreshTokenRepository::new()),
+            Arc::new(MockPasswordHasher),
+            Arc::new(MockTokenService::new()),
+            Arc::new(MockIdGenerator::new()),
+        )
+    }
+
+    fn create_test_user(id: &str, email: &str, password: &str) -> User {
+        User::new(
+            UserId::new(id.to_string()),
+            Email::new(email.to_string()).unwrap(),
+            PasswordHash::from_hash(format!("hashed_{}", password)),
+        )
+    }
+
+    // ==================== Registration Tests ====================
+
+    #[tokio::test]
+    async fn test_register_success() {
+        let service = create_auth_service();
+
+        let cmd = RegisterUserCommand {
+            email: "newuser@example.com".to_string(),
+            password: "securepassword123".to_string(),
+        };
+
+        let result = service.register(cmd).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.email, "newuser@example.com");
+        assert!(!response.access_token.is_empty());
+        assert!(!response.refresh_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_register_duplicate_email() {
+        let existing_user = create_test_user("user-1", "existing@example.com", "password123");
+        let service = create_auth_service_with_user(existing_user);
+
+        let cmd = RegisterUserCommand {
+            email: "existing@example.com".to_string(),
+            password: "securepassword123".to_string(),
+        };
+
+        let result = service.register(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::UserAlreadyExists)));
+    }
+
+    #[tokio::test]
+    async fn test_register_invalid_email() {
+        let service = create_auth_service();
+
+        let cmd = RegisterUserCommand {
+            email: "invalid-email".to_string(),
+            password: "securepassword123".to_string(),
+        };
+
+        let result = service.register(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::InvalidEmail(_))));
+    }
+
+    #[tokio::test]
+    async fn test_register_weak_password() {
+        let service = create_auth_service();
+
+        let cmd = RegisterUserCommand {
+            email: "user@example.com".to_string(),
+            password: "short".to_string(),
+        };
+
+        let result = service.register(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::WeakPassword)));
+    }
+
+    // ==================== Login Tests ====================
+
+    #[tokio::test]
+    async fn test_login_success() {
+        let user = create_test_user("user-1", "test@example.com", "correctpassword");
+        let service = create_auth_service_with_user(user);
+
+        let cmd = LoginCommand {
+            email: "test@example.com".to_string(),
+            password: "correctpassword".to_string(),
+        };
+
+        let result = service.login(cmd).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.email, "test@example.com");
+        assert_eq!(response.user_id, "user-1");
+    }
+
+    #[tokio::test]
+    async fn test_login_wrong_password() {
+        let user = create_test_user("user-1", "test@example.com", "correctpassword");
+        let service = create_auth_service_with_user(user);
+
+        let cmd = LoginCommand {
+            email: "test@example.com".to_string(),
+            password: "wrongpassword".to_string(),
+        };
+
+        let result = service.login(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::InvalidCredentials)));
+    }
+
+    #[tokio::test]
+    async fn test_login_user_not_found() {
+        let service = create_auth_service();
+
+        let cmd = LoginCommand {
+            email: "nonexistent@example.com".to_string(),
+            password: "somepassword".to_string(),
+        };
+
+        let result = service.login(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::InvalidCredentials)));
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_email_format() {
+        let service = create_auth_service();
+
+        let cmd = LoginCommand {
+            email: "not-an-email".to_string(),
+            password: "somepassword".to_string(),
+        };
+
+        let result = service.login(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::InvalidEmail(_))));
+    }
+
+    // ==================== Logout Tests ====================
+
+    #[tokio::test]
+    async fn test_logout_single_token() {
+        let user = create_test_user("user-1", "test@example.com", "password");
+        let token = RefreshToken::new(
+            TokenId::new("token-1".to_string()),
+            UserId::new("user-1".to_string()),
+            "hash_refresh_token_user-1".to_string(),
+            Utc::now() + Duration::days(7),
+        );
+
+        let service = AuthService::new(
+            Arc::new(MockUserRepository::with_user(user)),
+            Arc::new(MockRefreshTokenRepository::with_token(token)),
+            Arc::new(MockPasswordHasher),
+            Arc::new(MockTokenService::new()),
+            Arc::new(MockIdGenerator::new()),
+        );
+
+        let cmd = LogoutCommand {
+            user_id: "user-1".to_string(),
+            refresh_token: Some("refresh_token_user-1".to_string()),
+        };
+
+        let result = service.logout(cmd).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_logout_all_tokens() {
+        let service = create_auth_service();
+
+        let cmd = LogoutCommand {
+            user_id: "user-1".to_string(),
+            refresh_token: None,
+        };
+
+        let result = service.logout(cmd).await;
+
+        assert!(result.is_ok());
+    }
+
+    // ==================== Refresh Token Tests ====================
+
+    #[tokio::test]
+    async fn test_refresh_success() {
+        let user_id = UserId::new("user-1".to_string());
+        let token = RefreshToken::new(
+            TokenId::new("token-1".to_string()),
+            user_id.clone(),
+            "hash_refresh_token_user-1".to_string(),
+            Utc::now() + Duration::days(7),
+        );
+
+        let user = create_test_user("user-1", "test@example.com", "password");
+
+        let service = AuthService::new(
+            Arc::new(MockUserRepository::with_user(user)),
+            Arc::new(MockRefreshTokenRepository::with_token(token)),
+            Arc::new(MockPasswordHasher),
+            Arc::new(MockTokenService::new()),
+            Arc::new(MockIdGenerator::new()),
+        );
+
+        let cmd = RefreshTokenCommand {
+            refresh_token: "refresh_token_user-1".to_string(),
+        };
+
+        let result = service.refresh(cmd).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.user_id, "user-1");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_invalid_token() {
+        let service = AuthService::new(
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockRefreshTokenRepository::new()),
+            Arc::new(MockPasswordHasher),
+            Arc::new(MockTokenService::failing_decode()),
+            Arc::new(MockIdGenerator::new()),
+        );
+
+        let cmd = RefreshTokenCommand {
+            refresh_token: "invalid_token".to_string(),
+        };
+
+        let result = service.refresh(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::TokenInvalid)));
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_not_in_database() {
+        let service = create_auth_service();
+
+        let cmd = RefreshTokenCommand {
+            refresh_token: "refresh_token_user-1".to_string(),
+        };
+
+        let result = service.refresh(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::TokenInvalid)));
+    }
+
+    #[tokio::test]
+    async fn test_refresh_revoked_token() {
+        let user_id = UserId::new("user-1".to_string());
+        let mut token = RefreshToken::new(
+            TokenId::new("token-1".to_string()),
+            user_id.clone(),
+            "hash_refresh_token_user-1".to_string(),
+            Utc::now() + Duration::days(7),
+        );
+        token.revoke();
+
+        let service = AuthService::new(
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockRefreshTokenRepository::with_token(token)),
+            Arc::new(MockPasswordHasher),
+            Arc::new(MockTokenService::new()),
+            Arc::new(MockIdGenerator::new()),
+        );
+
+        let cmd = RefreshTokenCommand {
+            refresh_token: "refresh_token_user-1".to_string(),
+        };
+
+        let result = service.refresh(cmd).await;
+
+        assert!(matches!(result, Err(AuthDomainError::TokenRevoked)));
+    }
+
+    // ==================== Get Current User Tests ====================
+
+    #[tokio::test]
+    async fn test_get_current_user_success() {
+        let user = create_test_user("user-1", "test@example.com", "password");
+        let service = create_auth_service_with_user(user);
+
+        let result = service.get_current_user("user-1").await;
+
+        assert!(result.is_ok());
+        let user = result.unwrap();
+        assert_eq!(user.id().as_str(), "user-1");
+        assert_eq!(user.email().as_str(), "test@example.com");
+    }
+
+    #[tokio::test]
+    async fn test_get_current_user_not_found() {
+        let service = create_auth_service();
+
+        let result = service.get_current_user("nonexistent-user").await;
+
+        assert!(matches!(result, Err(AuthDomainError::UserNotFound)));
+    }
+}
