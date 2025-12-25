@@ -70,13 +70,13 @@ export function ProjectSettingsPage() {
           <ChangeProjectNameForm />
         </SectionCard>
 
-        {/* API Keys - order-3 on mobile, spans 3 rows on desktop */}
+        {/* API Keys - order-3 on mobile, right column on desktop (natural height) */}
         <SectionCard
           icon={Key}
           title="API Keys"
           description="Manage keys for data ingestion"
           staggerDelay={80}
-          className="order-3 lg:order-none lg:row-span-3"
+          className="order-3 lg:order-none lg:row-span-2 lg:self-start"
         >
           <ApiKeySection />
         </SectionCard>
