@@ -11,6 +11,7 @@ use super::extractors::AuthClaims;
 use crate::modules::auth::application::{
     AuthResponse, AuthService, ChangeEmailCommand, ChangePasswordCommand, DeleteAccountCommand,
     LoginCommand, LogoutCommand, RefreshTokenCommand, RegisterUserCommand, UpdateDisplayNameCommand,
+    UpdateSettingsCommand, UserSettingsResponse,
 };
 use crate::modules::auth::domain::{
     AuthDomainError, PasswordHasher, RefreshTokenRepository, UserRepository,
@@ -102,6 +103,24 @@ pub struct DeleteAccountRequest {
 #[derive(Debug, Deserialize)]
 pub struct UpdateDisplayNameRequest {
     pub display_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateSettingsRequest {
+    pub allow_invites: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SettingsResponseDto {
+    pub allow_invites: bool,
+}
+
+impl From<UserSettingsResponse> for SettingsResponseDto {
+    fn from(r: UserSettingsResponse) -> Self {
+        Self {
+            allow_invites: r.allow_invites,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -485,6 +504,54 @@ where
 
     auth_service
         .delete_account(cmd)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(to_error_response)
+}
+
+/// GET /api/auth/me/settings (protected)
+pub async fn get_settings<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
+    Extension(claims): Extension<AuthClaims>,
+) -> Result<Json<SettingsResponseDto>, (StatusCode, Json<ErrorResponse>)>
+where
+    U: UserRepository,
+    T: RefreshTokenRepository,
+    P: PasswordHasher,
+    TS: TokenService,
+    ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+{
+    auth_service
+        .get_settings(&claims.user_id)
+        .await
+        .map(|r| Json(r.into()))
+        .map_err(to_error_response)
+}
+
+/// PATCH /api/auth/me/settings (protected)
+pub async fn update_settings<U, T, P, TS, ID, OR, MR>(
+    State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req): Json<UpdateSettingsRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+where
+    U: UserRepository,
+    T: RefreshTokenRepository,
+    P: PasswordHasher,
+    TS: TokenService,
+    ID: IdGenerator,
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+{
+    let cmd = UpdateSettingsCommand {
+        user_id: claims.user_id,
+        allow_invites: req.allow_invites,
+    };
+
+    auth_service
+        .update_settings(cmd)
         .await
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(to_error_response)

@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
 // ==================== Commands ====================
 
@@ -111,4 +112,70 @@ pub struct SwitchOrgResponse {
     pub refresh_token: String,
     pub expires_in: i64,
     pub organization: OrgResponse,
+}
+
+/// Response for activity data
+#[derive(Debug, Clone)]
+pub struct ActivityResponse {
+    pub id: String,
+    pub activity_type: String,
+    pub actor_email: String,
+    pub target_email: Option<String>,
+    pub metadata: Option<HashMap<String, String>>,
+    pub created_at: DateTime<Utc>,
+}
+
+// ==================== Invite Commands ====================
+
+/// Command to send an invite to join an organization
+#[derive(Debug, Clone)]
+pub struct SendInviteCommand {
+    pub org_id: String,
+    pub invitee_email: String,
+    pub role: String,
+    pub inviter_user_id: String,
+}
+
+/// Command to accept an invite
+#[derive(Debug, Clone)]
+pub struct AcceptInviteCommand {
+    pub invite_id: String,
+    pub user_id: String,
+}
+
+/// Command to decline an invite
+#[derive(Debug, Clone)]
+pub struct DeclineInviteCommand {
+    pub invite_id: String,
+    pub user_id: String,
+}
+
+/// Command to cancel an invite (by org admin)
+#[derive(Debug, Clone)]
+pub struct CancelInviteCommand {
+    pub org_id: String,
+    pub invite_id: String,
+    pub requesting_user_id: String,
+}
+
+// ==================== Invite Responses ====================
+
+/// Response for invite data
+#[derive(Debug, Clone)]
+pub struct InviteResponse {
+    pub id: String,
+    pub organization_id: String,
+    pub organization_name: String,
+    pub inviter_email: String,
+    pub invitee_email: String,
+    pub role: String,
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Response for invite count
+#[derive(Debug, Clone)]
+pub struct InviteCountResponse {
+    pub count: i64,
 }

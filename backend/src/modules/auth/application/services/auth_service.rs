@@ -6,6 +6,7 @@ use rand::Rng;
 use crate::modules::auth::application::dto::{
     AuthResponse, ChangeEmailCommand, ChangePasswordCommand, DeleteAccountCommand, LoginCommand,
     LogoutCommand, RefreshTokenCommand, RegisterUserCommand, UpdateDisplayNameCommand,
+    UpdateSettingsCommand, UserSettingsResponse,
 };
 use crate::modules::auth::application::ports::{IdGenerator, OrgContext, TokenService};
 use crate::modules::auth::domain::{
@@ -423,6 +424,36 @@ where
         user.update_display_name(display_name);
 
         // 4. Persist changes
+        self.user_repo.save(&user).await
+    }
+
+    /// Get user's settings
+    pub async fn get_settings(&self, user_id: &str) -> Result<UserSettingsResponse, AuthDomainError> {
+        let user_id = UserId::new(user_id.to_string());
+        let user = self
+            .user_repo
+            .find_by_id(&user_id)
+            .await?
+            .ok_or(AuthDomainError::UserNotFound)?;
+
+        Ok(UserSettingsResponse {
+            allow_invites: user.allow_invites(),
+        })
+    }
+
+    /// Update user's settings
+    pub async fn update_settings(&self, cmd: UpdateSettingsCommand) -> Result<(), AuthDomainError> {
+        let user_id = UserId::new(cmd.user_id);
+        let mut user = self
+            .user_repo
+            .find_by_id(&user_id)
+            .await?
+            .ok_or(AuthDomainError::UserNotFound)?;
+
+        if let Some(allow_invites) = cmd.allow_invites {
+            user.update_allow_invites(allow_invites);
+        }
+
         self.user_repo.save(&user).await
     }
 

@@ -9,6 +9,7 @@ import {
 import { useSidebarStore } from '@/stores/sidebarStore';
 import { Tooltip } from '@/shared/components/Tooltip';
 import { OrgSelector } from '@/shared/components/OrgSelector';
+import { NotificationBell } from '@/shared/components/NotificationBell';
 
 interface NavItem {
   label: string;
@@ -109,17 +110,20 @@ export function Sidebar() {
       }`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between h-14 px-3 border-b border-border overflow-hidden">
+      <div className="flex items-center justify-between h-14 px-3 border-b border-border">
         <Logo collapsed={isCollapsed} onClick={isCollapsed ? toggle : undefined} />
-        <button
-          onClick={toggle}
-          className={`p-2 rounded-lg text-foreground-muted hover:bg-surface-alt hover:text-foreground transition-all duration-300 flex-shrink-0 ${
-            isCollapsed ? 'opacity-0 pointer-events-none w-0' : 'opacity-100'
-          }`}
-          aria-label="Collapse sidebar"
-        >
-          <PanelLeftClose className="w-5 h-5" />
-        </button>
+        <div className={`flex items-center gap-1 transition-all duration-300 ${
+          isCollapsed ? 'opacity-0 pointer-events-none w-0' : 'opacity-100'
+        }`}>
+          <NotificationBell />
+          <button
+            onClick={toggle}
+            className="p-2 rounded-lg text-foreground-muted hover:bg-surface-alt hover:text-foreground transition-colors flex-shrink-0"
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Organization selector */}

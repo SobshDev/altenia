@@ -58,6 +58,11 @@ where
             "/me/display-name",
             patch(handlers::update_display_name::<U, T, P, TS, ID, OR, MR>),
         )
+        .route(
+            "/me/settings",
+            get(handlers::get_settings::<U, T, P, TS, ID, OR, MR>)
+                .patch(handlers::update_settings::<U, T, P, TS, ID, OR, MR>),
+        )
         .layer(middleware::from_fn_with_state(
             token_service,
             auth_middleware::<TS>,

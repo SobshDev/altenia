@@ -1,8 +1,9 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{header::USER_AGENT, HeaderMap, StatusCode},
     Extension, Json,
 };
+use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -14,7 +15,7 @@ use crate::modules::auth::infrastructure::http::extractors::AuthClaims;
 use crate::modules::organizations::application::dto::*;
 use crate::modules::organizations::application::services::OrgService;
 use crate::modules::organizations::domain::{
-    OrgDomainError, OrganizationMemberRepository, OrganizationRepository,
+    OrgActivityRepository, OrgDomainError, OrganizationMemberRepository, OrganizationRepository,
 };
 
 // ============================================================================
@@ -126,18 +127,23 @@ impl From<SwitchOrgResponse> for SwitchOrgResponseDto {
 
 fn to_error_response(e: OrgDomainError) -> (StatusCode, Json<ErrorResponse>) {
     match e {
-        OrgDomainError::InvalidOrgName(_) | OrgDomainError::InvalidOrgSlug(_) | OrgDomainError::InvalidRole(_) => (
+        OrgDomainError::InvalidOrgName(_)
+        | OrgDomainError::InvalidOrgSlug(_)
+        | OrgDomainError::InvalidRole(_)
+        | OrgDomainError::InvalidActivityType(_)
+        | OrgDomainError::InvalidInviteStatus(_)
+        | OrgDomainError::CannotInviteSelf => (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "VALIDATION_ERROR".to_string(),
             }),
         ),
-        OrgDomainError::OrgNotFound => (
+        OrgDomainError::OrgNotFound | OrgDomainError::InviteNotFound => (
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
-                error: "Organization not found".to_string(),
-                code: "ORG_NOT_FOUND".to_string(),
+                error: e.to_string(),
+                code: "NOT_FOUND".to_string(),
             }),
         ),
         OrgDomainError::UserNotFound => (
@@ -147,7 +153,10 @@ fn to_error_response(e: OrgDomainError) -> (StatusCode, Json<ErrorResponse>) {
                 code: "USER_NOT_FOUND".to_string(),
             }),
         ),
-        OrgDomainError::SlugTaken | OrgDomainError::OrgAlreadyExists => (
+        OrgDomainError::SlugTaken
+        | OrgDomainError::OrgAlreadyExists
+        | OrgDomainError::InviteAlreadyExists
+        | OrgDomainError::InviteAlreadyProcessed => (
             StatusCode::CONFLICT,
             Json(ErrorResponse {
                 error: e.to_string(),
@@ -161,7 +170,9 @@ fn to_error_response(e: OrgDomainError) -> (StatusCode, Json<ErrorResponse>) {
                 code: "ALREADY_MEMBER".to_string(),
             }),
         ),
-        OrgDomainError::NotOrgMember | OrgDomainError::InsufficientPermissions => (
+        OrgDomainError::NotOrgMember
+        | OrgDomainError::InsufficientPermissions
+        | OrgDomainError::UserDoesNotAllowInvites => (
             StatusCode::FORBIDDEN,
             Json(ErrorResponse {
                 error: e.to_string(),
@@ -178,11 +189,11 @@ fn to_error_response(e: OrgDomainError) -> (StatusCode, Json<ErrorResponse>) {
                 code: "UNPROCESSABLE".to_string(),
             }),
         ),
-        OrgDomainError::OrgAlreadyDeleted => (
+        OrgDomainError::OrgAlreadyDeleted | OrgDomainError::InviteExpired => (
             StatusCode::GONE,
             Json(ErrorResponse {
-                error: "Organization has been deleted".to_string(),
-                code: "ORG_DELETED".to_string(),
+                error: e.to_string(),
+                code: "GONE".to_string(),
             }),
         ),
         OrgDomainError::InternalError(ref msg) => {
@@ -238,8 +249,8 @@ fn generate_device_fingerprint(headers: &HeaderMap) -> String {
 // ============================================================================
 
 /// POST /api/orgs
-pub async fn create_org<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn create_org<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Json(req): Json<CreateOrgRequest>,
 ) -> Result<(StatusCode, Json<OrgResponseDto>), (StatusCode, Json<ErrorResponse>)>
@@ -249,6 +260,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let cmd = CreateOrgCommand {
         name: req.name,
@@ -263,8 +275,8 @@ where
 }
 
 /// GET /api/orgs
-pub async fn list_orgs<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn list_orgs<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
 ) -> Result<Json<Vec<OrgResponseDto>>, (StatusCode, Json<ErrorResponse>)>
 where
@@ -273,6 +285,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     org_service
         .list_user_orgs(&claims.user_id)
@@ -282,8 +295,8 @@ where
 }
 
 /// GET /api/orgs/:id
-pub async fn get_org<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn get_org<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgResponseDto>, (StatusCode, Json<ErrorResponse>)>
@@ -293,6 +306,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     org_service
         .get_org(&org_id, &claims.user_id)
@@ -302,8 +316,8 @@ where
 }
 
 /// PATCH /api/orgs/:id
-pub async fn update_org<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn update_org<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path(org_id): Path<String>,
     Json(req): Json<UpdateOrgRequest>,
@@ -314,6 +328,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let cmd = UpdateOrgCommand {
         org_id,
@@ -329,8 +344,8 @@ where
 }
 
 /// DELETE /api/orgs/:id
-pub async fn delete_org<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn delete_org<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path(org_id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
@@ -340,6 +355,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let cmd = DeleteOrgCommand {
         org_id,
@@ -354,8 +370,8 @@ where
 }
 
 /// GET /api/orgs/:id/members
-pub async fn list_members<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn list_members<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path(org_id): Path<String>,
 ) -> Result<Json<Vec<MemberResponseDto>>, (StatusCode, Json<ErrorResponse>)>
@@ -365,6 +381,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     org_service
         .list_members(&org_id, &claims.user_id)
@@ -374,8 +391,8 @@ where
 }
 
 /// POST /api/orgs/:id/members
-pub async fn add_member<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn add_member<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path(org_id): Path<String>,
     Json(req): Json<AddMemberRequest>,
@@ -386,6 +403,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let cmd = AddMemberCommand {
         org_id,
@@ -402,8 +420,8 @@ where
 }
 
 /// PATCH /api/orgs/:id/members/:uid
-pub async fn update_member_role<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn update_member_role<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path((org_id, target_user_id)): Path<(String, String)>,
     Json(req): Json<UpdateMemberRoleRequest>,
@@ -414,6 +432,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let cmd = UpdateMemberRoleCommand {
         org_id,
@@ -430,8 +449,8 @@ where
 }
 
 /// DELETE /api/orgs/:id/members/:uid
-pub async fn remove_member<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn remove_member<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path((org_id, target_user_id)): Path<(String, String)>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
@@ -441,6 +460,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let cmd = RemoveMemberCommand {
         org_id,
@@ -456,8 +476,8 @@ where
 }
 
 /// POST /api/orgs/:id/leave
-pub async fn leave_org<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn leave_org<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path(org_id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
@@ -467,6 +487,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let cmd = LeaveOrgCommand {
         org_id,
@@ -481,8 +502,8 @@ where
 }
 
 /// POST /api/orgs/:id/transfer
-pub async fn transfer_ownership<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn transfer_ownership<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     Path(org_id): Path<String>,
     Json(req): Json<TransferOwnershipRequest>,
@@ -493,6 +514,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let cmd = TransferOwnershipCommand {
         org_id,
@@ -508,8 +530,8 @@ where
 }
 
 /// POST /api/orgs/:id/switch
-pub async fn switch_org<OR, MR, UR, TS, ID>(
-    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID>>>,
+pub async fn switch_org<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(org_id): Path<String>,
@@ -520,6 +542,7 @@ where
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     let device_fingerprint = generate_device_fingerprint(&headers);
 
@@ -533,5 +556,67 @@ where
         .switch_org(cmd)
         .await
         .map(|r| Json(r.into()))
+        .map_err(to_error_response)
+}
+
+// ============================================================================
+// Activities
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct ListActivitiesQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
+
+fn default_limit() -> i64 {
+    20
+}
+
+#[derive(Debug, Serialize)]
+pub struct ActivityResponseDto {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub activity_type: String,
+    pub actor_email: String,
+    pub target_email: Option<String>,
+    pub metadata: Option<HashMap<String, String>>,
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<ActivityResponse> for ActivityResponseDto {
+    fn from(r: ActivityResponse) -> Self {
+        Self {
+            id: r.id,
+            activity_type: r.activity_type,
+            actor_email: r.actor_email,
+            target_email: r.target_email,
+            metadata: r.metadata,
+            created_at: r.created_at,
+        }
+    }
+}
+
+/// GET /api/orgs/:id/activities
+pub async fn list_activities<OR, MR, UR, TS, ID, AR>(
+    State(org_service): State<Arc<OrgService<OR, MR, UR, TS, ID, AR>>>,
+    Extension(claims): Extension<AuthClaims>,
+    Path(org_id): Path<String>,
+    Query(query): Query<ListActivitiesQuery>,
+) -> Result<Json<Vec<ActivityResponseDto>>, (StatusCode, Json<ErrorResponse>)>
+where
+    OR: OrganizationRepository,
+    MR: OrganizationMemberRepository,
+    UR: UserRepository,
+    TS: TokenService,
+    ID: IdGenerator,
+    AR: OrgActivityRepository,
+{
+    org_service
+        .list_activities(&org_id, &claims.user_id, query.limit, query.offset)
+        .await
+        .map(|activities| Json(activities.into_iter().map(|a| a.into()).collect()))
         .map_err(to_error_response)
 }

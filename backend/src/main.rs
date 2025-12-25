@@ -19,8 +19,13 @@ use crate::modules::auth::{
     },
 };
 use crate::modules::organizations::{
-    application::services::OrgService,
-    infrastructure::{org_routes, PostgresOrganizationMemberRepository, PostgresOrganizationRepository},
+    application::services::{InviteService, OrgService},
+    domain::OrganizationInviteRepository,
+    infrastructure::{
+        org_invite_routes, org_routes, user_invite_routes, PostgresInviteRepository,
+        PostgresOrgActivityRepository, PostgresOrganizationMemberRepository,
+        PostgresOrganizationRepository,
+    },
 };
 use crate::modules::projects::{
     application::ProjectService,
@@ -120,12 +125,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         member_repo.clone(),
     ));
 
+    // Create activity repository
+    let activity_repo = Arc::new(PostgresOrgActivityRepository::new(pool.clone()));
+
+    // Create invite repository
+    let invite_repo = Arc::new(PostgresInviteRepository::new(pool.clone()));
+
     // Create organization service
     let org_service = Arc::new(OrgService::new(
         org_repo.clone(),
         member_repo.clone(),
-        user_repo,
+        user_repo.clone(),
         token_service.clone(),
+        id_generator.clone(),
+        activity_repo.clone(),
+    ));
+
+    // Create invite service
+    let invite_service = Arc::new(InviteService::new(
+        org_repo.clone(),
+        member_repo.clone(),
+        user_repo,
+        invite_repo.clone(),
+        activity_repo,
         id_generator.clone(),
     ));
 
@@ -289,10 +311,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Traces retention cleanup task started (runs every hour)");
     }
 
+    // Spawn invite expiration cleanup task
+    {
+        let cleanup_invite_repo = invite_repo.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60)); // 1 hour
+            loop {
+                interval.tick().await;
+                match cleanup_invite_repo.mark_expired().await {
+                    Ok(count) if count > 0 => {
+                        tracing::info!(expired_count = count, "Marked expired organization invites");
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "Failed to mark expired invites");
+                    }
+                    _ => {}
+                }
+            }
+        });
+        tracing::info!("Invite expiration cleanup task started (runs every hour)");
+    }
+
     // Create router
     let app = Router::new()
         .nest("/api/auth", auth_routes(auth_service, token_service.clone(), rate_limiter))
         .nest("/api", org_routes(org_service, token_service.clone()))
+        // Invite routes
+        .nest("/api", org_invite_routes(invite_service.clone(), token_service.clone()))
+        .nest("/api", user_invite_routes(invite_service, token_service.clone()))
         .nest("/api", project_routes(project_service.clone(), token_service.clone()))
         // Logging routes
         .nest("/api/v1/ingest", ingest_routes(log_service.clone(), project_service.clone()))
