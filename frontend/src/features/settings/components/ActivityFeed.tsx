@@ -126,7 +126,7 @@ export function ActivityFeed() {
       setError(null);
       try {
         const data = await apiClient.get<Activity[]>(
-          `/orgs/${currentOrg.id}/activities?limit=10`
+          `/orgs/${currentOrg.id}/activities?limit=50`
         );
         setActivities(data);
       } catch (err) {
@@ -177,7 +177,7 @@ export function ActivityFeed() {
           <p className="text-sm text-foreground-muted">No activity yet</p>
         </div>
       ) : (
-        <div className="divide-y divide-border">
+        <div className="max-h-80 overflow-y-auto divide-y divide-border">
           {activities.map((activity) => (
             <ActivityItem key={activity.id} activity={activity} />
           ))}
