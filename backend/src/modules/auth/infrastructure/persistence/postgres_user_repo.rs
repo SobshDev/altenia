@@ -31,6 +31,7 @@ impl PostgresUserRepository {
             email,
             password_hash,
             display_name,
+            row.allow_invites,
             row.created_at,
             row.updated_at,
             row.deleted_at,
@@ -43,7 +44,7 @@ impl UserRepository for PostgresUserRepository {
     async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, AuthDomainError> {
         let row: Option<UserRow> = sqlx::query_as(
             r#"
-            SELECT id, email, password_hash, display_name, created_at, updated_at, deleted_at
+            SELECT id, email, password_hash, display_name, allow_invites, created_at, updated_at, deleted_at
             FROM users
             WHERE id = $1 AND deleted_at IS NULL
             "#,
@@ -59,7 +60,7 @@ impl UserRepository for PostgresUserRepository {
     async fn find_by_email(&self, email: &Email) -> Result<Option<User>, AuthDomainError> {
         let row: Option<UserRow> = sqlx::query_as(
             r#"
-            SELECT id, email, password_hash, display_name, created_at, updated_at, deleted_at
+            SELECT id, email, password_hash, display_name, allow_invites, created_at, updated_at, deleted_at
             FROM users
             WHERE email = $1 AND deleted_at IS NULL
             "#,
@@ -75,12 +76,13 @@ impl UserRepository for PostgresUserRepository {
     async fn save(&self, user: &User) -> Result<(), AuthDomainError> {
         sqlx::query(
             r#"
-            INSERT INTO users (id, email, password_hash, display_name, created_at, updated_at, deleted_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO users (id, email, password_hash, display_name, allow_invites, created_at, updated_at, deleted_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (id) DO UPDATE SET
                 email = EXCLUDED.email,
                 password_hash = EXCLUDED.password_hash,
                 display_name = EXCLUDED.display_name,
+                allow_invites = EXCLUDED.allow_invites,
                 updated_at = EXCLUDED.updated_at,
                 deleted_at = EXCLUDED.deleted_at
             "#,
@@ -89,6 +91,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(user.email().as_str())
         .bind(user.password_hash().map(|h| h.as_str()))
         .bind(user.display_name().map(|d| d.as_str()))
+        .bind(user.allow_invites())
         .bind(user.created_at())
         .bind(user.updated_at())
         .bind(user.deleted_at())

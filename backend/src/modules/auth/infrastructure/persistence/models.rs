@@ -8,6 +8,7 @@ pub struct UserRow {
     pub email: String,
     pub password_hash: Option<String>,
     pub display_name: Option<String>,
+    pub allow_invites: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,

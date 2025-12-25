@@ -45,3 +45,47 @@ pub struct MemberWithEmailRow {
     pub role: String,
     pub created_at: DateTime<Utc>,
 }
+
+/// Database row for organization_activities table
+#[derive(Debug, FromRow)]
+pub struct OrgActivityRow {
+    pub id: String,
+    pub organization_id: String,
+    pub activity_type: String,
+    pub actor_id: String,
+    pub target_id: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Database row for organization_invites table
+#[derive(Debug, FromRow)]
+pub struct OrgInviteRow {
+    pub id: String,
+    pub organization_id: String,
+    pub inviter_id: String,
+    pub invitee_email: String,
+    pub invitee_id: Option<String>,
+    pub role: String,
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Joined query result: invite with organization name and inviter email
+#[derive(Debug, FromRow)]
+pub struct InviteWithDetailsRow {
+    pub id: String,
+    pub organization_id: String,
+    pub organization_name: String,
+    pub inviter_id: String,
+    pub inviter_email: String,
+    pub invitee_email: String,
+    pub invitee_id: Option<String>,
+    pub role: String,
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

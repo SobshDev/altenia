@@ -6,6 +6,8 @@ import { ChangeDisplayNameForm } from '../components/ChangeDisplayNameForm';
 import { ChangeEmailForm } from '../components/ChangeEmailForm';
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
 import { DeleteAccountSection } from '../components/DeleteAccountSection';
+import { InvitesSection } from '../components/InvitesSection';
+import { PrivacySettings } from '../components/PrivacySettings';
 
 export function AccountPage() {
   const { logout } = useAuthStore();
@@ -51,6 +53,9 @@ export function AccountPage() {
           </div>
         </SectionCard>
 
+        {/* Pending Invites */}
+        <InvitesSection />
+
         {/* Security Section */}
         <SectionCard
           icon={Shield}
@@ -60,6 +65,9 @@ export function AccountPage() {
         >
           <ChangePasswordForm />
         </SectionCard>
+
+        {/* Privacy Settings */}
+        <PrivacySettings />
 
         {/* Danger Zone */}
         <SectionCard

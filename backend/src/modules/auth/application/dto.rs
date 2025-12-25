@@ -64,6 +64,13 @@ pub struct UpdateDisplayNameCommand {
     pub display_name: String,
 }
 
+/// Command to update user's settings
+#[derive(Debug, Clone)]
+pub struct UpdateSettingsCommand {
+    pub user_id: String,
+    pub allow_invites: Option<bool>,
+}
+
 // ============================================================================
 // Responses (outputs)
 // ============================================================================
@@ -108,4 +115,10 @@ pub struct UserDto {
     pub email: String,
     pub display_name: Option<String>,
     pub created_at: String,
+}
+
+/// User settings response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserSettingsResponse {
+    pub allow_invites: bool,
 }

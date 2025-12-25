@@ -10,6 +10,7 @@ pub struct User {
     email: Email,
     password_hash: Option<PasswordHash>, // None for OAuth-only users
     display_name: Option<DisplayName>,
+    allow_invites: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     deleted_at: Option<DateTime<Utc>>,
@@ -24,6 +25,7 @@ impl User {
             email,
             password_hash: Some(password_hash),
             display_name: None,
+            allow_invites: true,
             created_at: now,
             updated_at: now,
             deleted_at: None,
@@ -38,6 +40,7 @@ impl User {
             email,
             password_hash: None,
             display_name: None,
+            allow_invites: true,
             created_at: now,
             updated_at: now,
             deleted_at: None,
@@ -50,6 +53,7 @@ impl User {
         email: Email,
         password_hash: Option<PasswordHash>,
         display_name: Option<DisplayName>,
+        allow_invites: bool,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
         deleted_at: Option<DateTime<Utc>>,
@@ -59,6 +63,7 @@ impl User {
             email,
             password_hash,
             display_name,
+            allow_invites,
             created_at,
             updated_at,
             deleted_at,
@@ -94,6 +99,10 @@ impl User {
         self.display_name.as_ref()
     }
 
+    pub fn allow_invites(&self) -> bool {
+        self.allow_invites
+    }
+
     pub fn is_deleted(&self) -> bool {
         self.deleted_at.is_some()
     }
@@ -122,6 +131,12 @@ impl User {
     /// Update the user's display name
     pub fn update_display_name(&mut self, new_display_name: DisplayName) {
         self.display_name = Some(new_display_name);
+        self.updated_at = Utc::now();
+    }
+
+    /// Update the user's allow_invites setting
+    pub fn update_allow_invites(&mut self, allow_invites: bool) {
+        self.allow_invites = allow_invites;
         self.updated_at = Utc::now();
     }
 

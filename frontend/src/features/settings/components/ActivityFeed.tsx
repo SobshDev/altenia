@@ -6,8 +6,12 @@ import {
   Shield,
   Building2,
   Pencil,
+  Mail,
+  Check,
+  X,
 } from 'lucide-react';
 import { useOrgStore } from '@/stores/orgStore';
+import { apiClient } from '@/shared/api/client';
 import type { Activity, ActivityType } from '@/shared/types/api';
 
 const activityConfig: Record<
@@ -51,6 +55,25 @@ const activityConfig: Record<
     getMessage: (a) =>
       `${a.actor_email} renamed the organization to "${a.metadata?.new_name || 'Unknown'}"`,
   },
+  invite_sent: {
+    icon: Mail,
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-500/10',
+    getMessage: (a) =>
+      `${a.actor_email} invited ${a.metadata?.invitee_email || 'someone'} as ${a.metadata?.role || 'member'}`,
+  },
+  invite_accepted: {
+    icon: Check,
+    color: 'text-green-500',
+    bgColor: 'bg-green-500/10',
+    getMessage: (a) => `${a.actor_email} accepted the invite and joined the organization`,
+  },
+  invite_declined: {
+    icon: X,
+    color: 'text-red-500',
+    bgColor: 'bg-red-500/10',
+    getMessage: (a) => `${a.actor_email} declined the invite`,
+  },
 };
 
 function formatRelativeTime(dateString: string): string {
@@ -90,45 +113,31 @@ function ActivityItem({ activity }: { activity: Activity }) {
 }
 
 export function ActivityFeed() {
-  const { currentOrg, members } = useOrgStore();
+  const { currentOrg } = useOrgStore();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentOrg) return;
 
-    // Helper to get display name or fallback to email
-    const getDisplayName = (member: typeof members[0]) => member.display_name || member.email;
+    const fetchActivities = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await apiClient.get<Activity[]>(
+          `/orgs/${currentOrg.id}/activities?limit=10`
+        );
+        setActivities(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch activities');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    // Generate activities from members data for now
-    // This will be replaced with an API call later
-    const generatedActivities: Activity[] = members.map((member) => ({
-      id: `activity-${member.id}`,
-      type: 'member_added' as ActivityType,
-      actor_email: members[0] ? getDisplayName(members[0]) : 'Unknown',
-      target_email: getDisplayName(member),
-      created_at: member.joined_at,
-    }));
-
-    // Add org creation event
-    if (currentOrg.created_at) {
-      const owner = members.find((m) => m.role === 'owner');
-      generatedActivities.push({
-        id: 'org-created',
-        type: 'org_created',
-        actor_email: owner ? getDisplayName(owner) : 'Unknown',
-        created_at: currentOrg.created_at,
-      });
-    }
-
-    // Sort by date descending
-    generatedActivities.sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-
-    setActivities(generatedActivities.slice(0, 10));
-    setIsLoading(false);
-  }, [currentOrg, members]);
+    fetchActivities();
+  }, [currentOrg]);
 
   return (
     <div className="bg-surface border border-border rounded-xl p-5">
@@ -153,6 +162,11 @@ export function ActivityFeed() {
               </div>
             </div>
           ))}
+        </div>
+      ) : error ? (
+        <div className="py-8 text-center">
+          <ActivityIcon className="w-10 h-10 text-red-500/50 mx-auto mb-3" />
+          <p className="text-sm text-foreground-muted">{error}</p>
         </div>
       ) : activities.length === 0 ? (
         <div className="py-8 text-center">

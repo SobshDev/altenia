@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use rand::Rng;
@@ -6,33 +7,37 @@ use crate::modules::auth::application::ports::{IdGenerator, OrgContext, TokenSer
 use crate::modules::auth::domain::{AuthDomainError, Email, UserRepository, UserId};
 use crate::modules::organizations::application::dto::*;
 use crate::modules::organizations::domain::{
-    MemberId, OrgDomainError, OrgId, OrgName, OrgRole, OrgSlug, Organization,
-    OrganizationMember, OrganizationMemberRepository, OrganizationRepository,
+    ActivityId, ActivityType, MemberId, OrgActivity, OrgActivityRepository, OrgDomainError,
+    OrgId, OrgName, OrgRole, OrgSlug, Organization, OrganizationMember,
+    OrganizationMemberRepository, OrganizationRepository,
 };
 
 /// Organization service - orchestrates all organization use cases
-pub struct OrgService<OR, MR, UR, TS, ID>
+pub struct OrgService<OR, MR, UR, TS, ID, AR>
 where
     OR: OrganizationRepository,
     MR: OrganizationMemberRepository,
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     org_repo: Arc<OR>,
     member_repo: Arc<MR>,
     user_repo: Arc<UR>,
     token_service: Arc<TS>,
     id_generator: Arc<ID>,
+    activity_repo: Arc<AR>,
 }
 
-impl<OR, MR, UR, TS, ID> OrgService<OR, MR, UR, TS, ID>
+impl<OR, MR, UR, TS, ID, AR> OrgService<OR, MR, UR, TS, ID, AR>
 where
     OR: OrganizationRepository,
     MR: OrganizationMemberRepository,
     UR: UserRepository,
     TS: TokenService,
     ID: IdGenerator,
+    AR: OrgActivityRepository,
 {
     pub fn new(
         org_repo: Arc<OR>,
@@ -40,6 +45,7 @@ where
         user_repo: Arc<UR>,
         token_service: Arc<TS>,
         id_generator: Arc<ID>,
+        activity_repo: Arc<AR>,
     ) -> Self {
         Self {
             org_repo,
@@ -47,6 +53,7 @@ where
             user_repo,
             token_service,
             id_generator,
+            activity_repo,
         }
     }
 
@@ -84,11 +91,22 @@ where
         let mut member = OrganizationMember::new(
             member_id,
             org_id.clone(),
-            user_id,
+            user_id.clone(),
             OrgRole::Owner,
         );
         member.touch_last_accessed();
         self.member_repo.save(&member).await?;
+
+        // 6. Log activity
+        let activity = OrgActivity::new(
+            ActivityId::new(self.id_generator.generate()),
+            org_id,
+            ActivityType::OrgCreated,
+            user_id,
+            None,
+            None,
+        );
+        let _ = self.activity_repo.save(&activity).await;
 
         Ok(OrgResponse {
             id: org.id().as_str().to_string(),
@@ -225,11 +243,26 @@ where
 
         // 3. Update if name provided
         if let Some(new_name) = cmd.name {
+            let old_name = org.name().as_str().to_string();
             let name = OrgName::new(new_name)?;
             let suffix = self.generate_random_suffix();
             let slug = OrgSlug::generate(&name, &suffix);
             org.update_name(name, slug);
             self.org_repo.save(&org).await?;
+
+            // Log activity
+            let mut metadata = HashMap::new();
+            metadata.insert("old_name".to_string(), old_name);
+            metadata.insert("new_name".to_string(), org.name().as_str().to_string());
+            let activity = OrgActivity::new(
+                ActivityId::new(self.id_generator.generate()),
+                org_id.clone(),
+                ActivityType::OrgNameChanged,
+                user_id,
+                None,
+                Some(metadata),
+            );
+            let _ = self.activity_repo.save(&activity).await;
         }
 
         Ok(OrgResponse {
@@ -329,8 +362,19 @@ where
 
         // 5. Create membership
         let member_id = MemberId::new(self.id_generator.generate());
-        let member = OrganizationMember::new(member_id, org_id, target_user_id.clone(), new_role);
+        let member = OrganizationMember::new(member_id, org_id.clone(), target_user_id.clone(), new_role);
         self.member_repo.save(&member).await?;
+
+        // 6. Log activity
+        let activity = OrgActivity::new(
+            ActivityId::new(self.id_generator.generate()),
+            org_id,
+            ActivityType::MemberAdded,
+            requesting_user_id,
+            Some(target_user_id.clone()),
+            None,
+        );
+        let _ = self.activity_repo.save(&activity).await;
 
         Ok(MemberResponse {
             id: member.id().as_str().to_string(),
@@ -423,6 +467,7 @@ where
 
         // 3. Parse new role
         let new_role = OrgRole::from_str(&cmd.new_role)?;
+        let old_role = *target_membership.role();
 
         // 4. If demoting from owner, check not last owner
         if target_membership.role() == &OrgRole::Owner && new_role != OrgRole::Owner {
@@ -435,6 +480,20 @@ where
         // 5. Update role
         target_membership.update_role(new_role);
         self.member_repo.save(&target_membership).await?;
+
+        // 6. Log activity
+        let mut metadata = HashMap::new();
+        metadata.insert("old_role".to_string(), old_role.as_str().to_string());
+        metadata.insert("new_role".to_string(), new_role.as_str().to_string());
+        let activity = OrgActivity::new(
+            ActivityId::new(self.id_generator.generate()),
+            org_id,
+            ActivityType::MemberRoleChanged,
+            requesting_user_id,
+            Some(target_user_id.clone()),
+            Some(metadata),
+        );
+        let _ = self.activity_repo.save(&activity).await;
 
         // Get user email for response
         let user = self
@@ -494,6 +553,17 @@ where
         // 5. Delete membership
         self.member_repo.delete(target_membership.id()).await?;
 
+        // 6. Log activity
+        let activity = OrgActivity::new(
+            ActivityId::new(self.id_generator.generate()),
+            org_id,
+            ActivityType::MemberRemoved,
+            requesting_user_id,
+            Some(target_user_id),
+            None,
+        );
+        let _ = self.activity_repo.save(&activity).await;
+
         Ok(())
     }
 
@@ -519,6 +589,19 @@ where
 
         // 3. Delete membership
         self.member_repo.delete(membership.id()).await?;
+
+        // 4. Log activity (user leaving is both actor and target)
+        let mut metadata = HashMap::new();
+        metadata.insert("reason".to_string(), "left".to_string());
+        let activity = OrgActivity::new(
+            ActivityId::new(self.id_generator.generate()),
+            org_id,
+            ActivityType::MemberRemoved,
+            user_id.clone(),
+            Some(user_id),
+            Some(metadata),
+        );
+        let _ = self.activity_repo.save(&activity).await;
 
         Ok(())
     }
@@ -550,6 +633,8 @@ where
             .await?
             .ok_or(OrgDomainError::NotOrgMember)?;
 
+        let old_new_owner_role = *new_owner_membership.role();
+
         // 3. Promote new owner
         new_owner_membership.update_role(OrgRole::Owner);
         self.member_repo.save(&new_owner_membership).await?;
@@ -558,7 +643,35 @@ where
         requester_membership.update_role(OrgRole::Admin);
         self.member_repo.save(&requester_membership).await?;
 
-        // 5. Get organization details
+        // 5. Log activity for new owner promotion
+        let mut metadata = HashMap::new();
+        metadata.insert("old_role".to_string(), old_new_owner_role.as_str().to_string());
+        metadata.insert("new_role".to_string(), OrgRole::Owner.as_str().to_string());
+        let activity = OrgActivity::new(
+            ActivityId::new(self.id_generator.generate()),
+            org_id.clone(),
+            ActivityType::MemberRoleChanged,
+            requesting_user_id.clone(),
+            Some(new_owner_user_id),
+            Some(metadata),
+        );
+        let _ = self.activity_repo.save(&activity).await;
+
+        // 6. Log activity for old owner demotion
+        let mut metadata = HashMap::new();
+        metadata.insert("old_role".to_string(), OrgRole::Owner.as_str().to_string());
+        metadata.insert("new_role".to_string(), OrgRole::Admin.as_str().to_string());
+        let activity = OrgActivity::new(
+            ActivityId::new(self.id_generator.generate()),
+            org_id.clone(),
+            ActivityType::MemberRoleChanged,
+            requesting_user_id.clone(),
+            Some(requesting_user_id.clone()),
+            Some(metadata),
+        );
+        let _ = self.activity_repo.save(&activity).await;
+
+        // 7. Get organization details
         let org = self
             .org_repo
             .find_by_id(&org_id)
@@ -694,5 +807,64 @@ where
         }
 
         Ok(None)
+    }
+
+    /// List activities for an organization
+    pub async fn list_activities(
+        &self,
+        org_id: &str,
+        requesting_user_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<ActivityResponse>, OrgDomainError> {
+        let org_id = OrgId::new(org_id.to_string());
+        let user_id = UserId::new(requesting_user_id.to_string());
+
+        // 1. Verify membership
+        self.member_repo
+            .find_by_org_and_user(&org_id, &user_id)
+            .await?
+            .ok_or(OrgDomainError::NotOrgMember)?;
+
+        // 2. Get activities
+        let activities = self.activity_repo.find_by_org(&org_id, limit, offset).await?;
+
+        // 3. Map to responses (look up emails for actor and target)
+        let mut responses = Vec::new();
+        for activity in activities {
+            let actor = self
+                .user_repo
+                .find_by_id(activity.actor_id())
+                .await
+                .ok()
+                .flatten();
+
+            let target = if let Some(target_id) = activity.target_id() {
+                self.user_repo.find_by_id(target_id).await.ok().flatten()
+            } else {
+                None
+            };
+
+            responses.push(ActivityResponse {
+                id: activity.id().as_str().to_string(),
+                activity_type: activity.activity_type().as_str().to_string(),
+                actor_email: actor
+                    .map(|u| {
+                        u.display_name()
+                            .map(|d| d.as_str().to_string())
+                            .unwrap_or_else(|| u.email().as_str().to_string())
+                    })
+                    .unwrap_or_else(|| "Unknown".to_string()),
+                target_email: target.map(|u| {
+                    u.display_name()
+                        .map(|d| d.as_str().to_string())
+                        .unwrap_or_else(|| u.email().as_str().to_string())
+                }),
+                metadata: activity.metadata().cloned(),
+                created_at: activity.created_at(),
+            });
+        }
+
+        Ok(responses)
     }
 }
