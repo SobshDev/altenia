@@ -10,6 +10,7 @@ import { useSidebarStore } from '@/stores/sidebarStore';
 import { Tooltip } from '@/shared/components/Tooltip';
 import { OrgSelector } from '@/shared/components/OrgSelector';
 import { NotificationBell } from '@/shared/components/NotificationBell';
+import { ProjectList } from '@/features/projects/components/ProjectList';
 
 interface NavItem {
   label: string;
@@ -131,8 +132,15 @@ export function Sidebar() {
         <OrgSelector collapsed={isCollapsed} />
       </div>
 
-      {/* Main navigation */}
+      {/* Projects and main navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-hidden">
+        {/* Project list */}
+        <ProjectList collapsed={isCollapsed} />
+
+        {/* Divider */}
+        <div className="border-t border-border my-3" />
+
+        {/* Main nav items */}
         {mainNavItems.map((item) => (
           <NavItemLink key={item.href} item={item} collapsed={isCollapsed} />
         ))}
