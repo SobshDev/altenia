@@ -73,7 +73,7 @@ export function InvitesSection() {
         icon={Mail}
         title="Pending Invites"
         description="Organization invites waiting for your response"
-        staggerDelay={300}
+        staggerDelay={80}
       >
         <div className="flex items-center justify-center py-8">
           <Loader2 className="w-6 h-6 animate-spin text-foreground-muted" />
@@ -87,7 +87,7 @@ export function InvitesSection() {
       icon={Mail}
       title="Pending Invites"
       description="Organization invites waiting for your response"
-      staggerDelay={300}
+      staggerDelay={80}
     >
       {(error || userInvitesError) && (
         <ErrorAlert
@@ -107,10 +107,11 @@ export function InvitesSection() {
         </div>
       ) : (
         <div className="space-y-3">
-          {userInvites.map((invite) => (
+          {userInvites.map((invite, index) => (
             <div
               key={invite.id}
-              className="p-4 rounded-lg bg-surface-alt border border-border"
+              className="p-4 rounded-lg bg-surface-alt border border-border animate-list-item hover:border-primary/20 hover:bg-surface-alt/80 transition-colors"
+              style={{ '--item-index': index } as React.CSSProperties}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3 min-w-0">

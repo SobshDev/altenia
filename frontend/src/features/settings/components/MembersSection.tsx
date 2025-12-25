@@ -143,7 +143,7 @@ export function MembersSection() {
 
       {/* Members list */}
       <div className="space-y-2">
-        {members.map((member) => {
+        {members.map((member, index) => {
           const RoleIcon = roleIcons[member.role];
           const isCurrentUser = member.user_id === user?.id;
           const canManage = isOwner && !isCurrentUser && member.role !== 'owner';
@@ -152,7 +152,8 @@ export function MembersSection() {
           return (
             <div
               key={member.id}
-              className="flex items-center justify-between p-3 rounded-lg bg-surface-alt"
+              className="flex items-center justify-between p-3 rounded-lg bg-surface-alt animate-list-item hover:bg-surface-alt/80 transition-colors"
+              style={{ '--item-index': index } as React.CSSProperties}
             >
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-primary/10">
@@ -201,10 +202,11 @@ export function MembersSection() {
       {isAdmin && orgInvites.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium text-foreground-muted">Pending Invites</p>
-          {orgInvites.map((invite) => (
+          {orgInvites.map((invite, index) => (
             <div
               key={invite.id}
-              className="flex items-center justify-between p-3 rounded-lg bg-surface-alt border border-border/50"
+              className="flex items-center justify-between p-3 rounded-lg bg-surface-alt border border-border/50 animate-list-item hover:border-primary/20 transition-colors"
+              style={{ '--item-index': index } as React.CSSProperties}
             >
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-primary/10">

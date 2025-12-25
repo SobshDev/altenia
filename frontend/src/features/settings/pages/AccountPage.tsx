@@ -45,7 +45,7 @@ export function AccountPage() {
             icon={User}
             title="Profile"
             description="Your display name and account details"
-            staggerDelay={100}
+            staggerDelay={50}
           >
             <div className="space-y-6">
               <ChangeDisplayNameForm />
@@ -60,7 +60,7 @@ export function AccountPage() {
             icon={Shield}
             title="Security"
             description="Protect your account with a strong password"
-            staggerDelay={200}
+            staggerDelay={120}
           >
             <ChangePasswordForm />
           </SectionCard>
@@ -70,7 +70,7 @@ export function AccountPage() {
             icon={AlertTriangle}
             title="Danger Zone"
             variant="destructive"
-            staggerDelay={300}
+            staggerDelay={190}
           >
             <DeleteAccountSection />
           </SectionCard>

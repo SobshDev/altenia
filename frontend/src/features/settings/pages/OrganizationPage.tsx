@@ -37,7 +37,7 @@ export function OrganizationPage() {
             icon={Building2}
             title="General"
             description="Organization name and details"
-            staggerDelay={100}
+            staggerDelay={50}
           >
             <ChangeOrgNameForm />
           </SectionCard>
@@ -46,7 +46,7 @@ export function OrganizationPage() {
             icon={Users}
             title="Members"
             description="Manage organization members and their roles"
-            staggerDelay={200}
+            staggerDelay={120}
           >
             <MembersSection />
           </SectionCard>
@@ -56,7 +56,7 @@ export function OrganizationPage() {
             icon={AlertTriangle}
             title="Danger Zone"
             variant="destructive"
-            staggerDelay={300}
+            staggerDelay={190}
           >
             <div className="space-y-6">
               <TransferOwnershipSection />
@@ -69,14 +69,14 @@ export function OrganizationPage() {
         <div className="flex-1 space-y-6">
           <div
             className="animate-fade-in-up"
-            style={{ '--stagger': '100ms' } as React.CSSProperties}
+            style={{ '--stagger': '80ms' } as React.CSSProperties}
           >
             <OrganizationOverview />
           </div>
 
           <div
             className="animate-fade-in-up"
-            style={{ '--stagger': '200ms' } as React.CSSProperties}
+            style={{ '--stagger': '150ms' } as React.CSSProperties}
           >
             <ActivityFeed />
           </div>

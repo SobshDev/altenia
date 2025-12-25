@@ -33,7 +33,7 @@ export function PrivacySettings() {
         icon={Shield}
         title="Privacy"
         description="Control who can send you invites"
-        staggerDelay={400}
+        staggerDelay={150}
       >
         <div className="flex items-center justify-center py-4">
           <Loader2 className="w-5 h-5 animate-spin text-foreground-muted" />
@@ -47,7 +47,7 @@ export function PrivacySettings() {
       icon={Shield}
       title="Privacy"
       description="Control who can send you invites"
-      staggerDelay={400}
+      staggerDelay={150}
     >
       {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
 
