@@ -140,14 +140,17 @@ export function ActivityFeed() {
   }, [currentOrg]);
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-5">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2.5 rounded-lg bg-primary/10">
+    <div className="glass-card glow rounded-2xl p-6 animate-fade-in-up" style={{ '--stagger': '150ms' } as React.CSSProperties}>
+      <div className="flex items-start gap-4 mb-5">
+        <div
+          className="p-3 rounded-xl bg-primary/10 animate-icon-pop card-icon"
+          style={{ '--stagger': '150ms' } as React.CSSProperties}
+        >
           <ActivityIcon className="w-5 h-5 text-primary" />
         </div>
-        <div>
-          <h3 className="font-semibold text-foreground">Recent Activity</h3>
-          <p className="text-sm text-foreground-muted">Latest organization events</p>
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold text-foreground">Recent Activity</h2>
+          <p className="mt-1 text-sm text-foreground-muted">Latest organization events</p>
         </div>
       </div>
 

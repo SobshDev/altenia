@@ -67,19 +67,8 @@ export function OrganizationPage() {
 
         {/* Right column */}
         <div className="flex-1 space-y-6">
-          <div
-            className="animate-fade-in-up"
-            style={{ '--stagger': '80ms' } as React.CSSProperties}
-          >
-            <OrganizationOverview />
-          </div>
-
-          <div
-            className="animate-fade-in-up"
-            style={{ '--stagger': '150ms' } as React.CSSProperties}
-          >
-            <ActivityFeed />
-          </div>
+          <OrganizationOverview />
+          <ActivityFeed />
         </div>
       </div>
     </div>
