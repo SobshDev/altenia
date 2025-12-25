@@ -535,7 +535,7 @@ pub async fn update_settings<U, T, P, TS, ID, OR, MR>(
     State(auth_service): State<Arc<AuthService<U, T, P, TS, ID, OR, MR>>>,
     Extension(claims): Extension<AuthClaims>,
     Json(req): Json<UpdateSettingsRequest>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)>
+) -> Result<Json<SettingsResponseDto>, (StatusCode, Json<ErrorResponse>)>
 where
     U: UserRepository,
     T: RefreshTokenRepository,
@@ -553,6 +553,6 @@ where
     auth_service
         .update_settings(cmd)
         .await
-        .map(|_| StatusCode::NO_CONTENT)
+        .map(|settings| Json(settings.into()))
         .map_err(to_error_response)
 }

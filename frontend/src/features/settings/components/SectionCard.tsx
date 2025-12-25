@@ -23,18 +23,19 @@ export function SectionCard({
     <div
       className={`rounded-2xl p-6 animate-fade-in-up ${
         isDestructive
-          ? 'bg-destructive/5 border border-destructive/20'
+          ? 'bg-destructive/5 border border-destructive/20 hover:border-destructive/30 transition-colors'
           : 'glass-card glow'
       }`}
       style={{ '--stagger': `${staggerDelay}ms` } as React.CSSProperties}
     >
       <div className="flex items-start gap-4">
         <div
-          className={`p-3 rounded-xl ${
+          className={`p-3 rounded-xl animate-icon-pop card-icon ${
             isDestructive
               ? 'bg-destructive/10 text-destructive'
               : 'bg-primary/10 text-primary'
           }`}
+          style={{ '--stagger': `${staggerDelay}ms` } as React.CSSProperties}
         >
           <Icon className="w-5 h-5" />
         </div>

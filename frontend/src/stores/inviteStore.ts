@@ -134,9 +134,14 @@ export const useInviteStore = create<InviteState>((set) => ({
     }
   },
 
-  updateSettings: async (settings: Partial<UserSettings>) => {
-    const updated = await apiClient.patch<UserSettings>('/auth/me/settings', settings);
-    set({ settings: updated });
+  updateSettings: async (newSettings: Partial<UserSettings>) => {
+    await apiClient.patch('/auth/me/settings', newSettings);
+    // Update state directly with the new values
+    set((state) => ({
+      settings: state.settings
+        ? { ...state.settings, ...newSettings }
+        : { allow_invites: newSettings.allow_invites ?? true },
+    }));
   },
 
   clearUserInvitesError: () => set({ userInvitesError: null }),

@@ -30,14 +30,14 @@ export function OrganizationPage() {
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
         {/* Left column */}
         <div className="flex-1 space-y-6">
           <SectionCard
             icon={Building2}
             title="General"
             description="Organization name and details"
-            staggerDelay={100}
+            staggerDelay={50}
           >
             <ChangeOrgNameForm />
           </SectionCard>
@@ -46,43 +46,30 @@ export function OrganizationPage() {
             icon={Users}
             title="Members"
             description="Manage organization members and their roles"
-            staggerDelay={200}
+            staggerDelay={120}
           >
             <MembersSection />
+          </SectionCard>
+
+          {/* Danger Zone */}
+          <SectionCard
+            icon={AlertTriangle}
+            title="Danger Zone"
+            variant="destructive"
+            staggerDelay={190}
+          >
+            <div className="space-y-6">
+              <TransferOwnershipSection />
+              <LeaveOrgSection />
+            </div>
           </SectionCard>
         </div>
 
         {/* Right column */}
         <div className="flex-1 space-y-6">
-          <div
-            className="animate-fade-in-up"
-            style={{ '--stagger': '100ms' } as React.CSSProperties}
-          >
-            <OrganizationOverview />
-          </div>
-
-          <div
-            className="animate-fade-in-up"
-            style={{ '--stagger': '200ms' } as React.CSSProperties}
-          >
-            <ActivityFeed />
-          </div>
+          <OrganizationOverview />
+          <ActivityFeed />
         </div>
-      </div>
-
-      {/* Danger Zone - Full width at bottom */}
-      <div className="mt-6">
-        <SectionCard
-          icon={AlertTriangle}
-          title="Danger Zone"
-          variant="destructive"
-          staggerDelay={300}
-        >
-          <div className="space-y-6">
-            <TransferOwnershipSection />
-            <LeaveOrgSection />
-          </div>
-        </SectionCard>
       </div>
     </div>
   );
