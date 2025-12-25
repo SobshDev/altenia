@@ -442,7 +442,7 @@ where
     }
 
     /// Update user's settings
-    pub async fn update_settings(&self, cmd: UpdateSettingsCommand) -> Result<(), AuthDomainError> {
+    pub async fn update_settings(&self, cmd: UpdateSettingsCommand) -> Result<UserSettingsResponse, AuthDomainError> {
         let user_id = UserId::new(cmd.user_id);
         let mut user = self
             .user_repo
@@ -454,7 +454,11 @@ where
             user.update_allow_invites(allow_invites);
         }
 
-        self.user_repo.save(&user).await
+        self.user_repo.save(&user).await?;
+
+        Ok(UserSettingsResponse {
+            allow_invites: user.allow_invites(),
+        })
     }
 
     /// Change user's email address

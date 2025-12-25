@@ -30,7 +30,7 @@ export function OrganizationPage() {
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
         {/* Left column */}
         <div className="flex-1 space-y-6">
           <SectionCard
@@ -50,6 +50,19 @@ export function OrganizationPage() {
           >
             <MembersSection />
           </SectionCard>
+
+          {/* Danger Zone */}
+          <SectionCard
+            icon={AlertTriangle}
+            title="Danger Zone"
+            variant="destructive"
+            staggerDelay={300}
+          >
+            <div className="space-y-6">
+              <TransferOwnershipSection />
+              <LeaveOrgSection />
+            </div>
+          </SectionCard>
         </div>
 
         {/* Right column */}
@@ -68,21 +81,6 @@ export function OrganizationPage() {
             <ActivityFeed />
           </div>
         </div>
-      </div>
-
-      {/* Danger Zone - Full width at bottom */}
-      <div className="mt-6">
-        <SectionCard
-          icon={AlertTriangle}
-          title="Danger Zone"
-          variant="destructive"
-          staggerDelay={300}
-        >
-          <div className="space-y-6">
-            <TransferOwnershipSection />
-            <LeaveOrgSection />
-          </div>
-        </SectionCard>
       </div>
     </div>
   );
