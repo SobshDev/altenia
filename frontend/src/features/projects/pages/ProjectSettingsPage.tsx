@@ -58,49 +58,50 @@ export function ProjectSettingsPage() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
-        {/* Left column */}
-        <div className="flex-1 space-y-6">
-          <SectionCard
-            icon={FolderKanban}
-            title="General"
-            description="Project name and description"
-            staggerDelay={50}
-          >
-            <ChangeProjectNameForm />
-          </SectionCard>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* General - order-1 on mobile */}
+        <SectionCard
+          icon={FolderKanban}
+          title="General"
+          description="Project name and description"
+          staggerDelay={50}
+          className="order-1 lg:order-none"
+        >
+          <ChangeProjectNameForm />
+        </SectionCard>
 
-          <SectionCard
-            icon={Database}
-            title="Data Retention"
-            description="Configure how long data is stored"
-            staggerDelay={120}
-          >
-            <ProjectRetentionForm />
-          </SectionCard>
+        {/* API Keys - order-3 on mobile, spans 3 rows on desktop */}
+        <SectionCard
+          icon={Key}
+          title="API Keys"
+          description="Manage keys for data ingestion"
+          staggerDelay={80}
+          className="order-3 lg:order-none lg:row-span-3"
+        >
+          <ApiKeySection />
+        </SectionCard>
 
-          {/* Danger Zone */}
-          <SectionCard
-            icon={AlertTriangle}
-            title="Danger Zone"
-            variant="destructive"
-            staggerDelay={190}
-          >
-            <DeleteProjectSection />
-          </SectionCard>
-        </div>
+        {/* Data Retention - order-2 on mobile */}
+        <SectionCard
+          icon={Database}
+          title="Data Retention"
+          description="Configure how long data is stored"
+          staggerDelay={120}
+          className="order-2 lg:order-none"
+        >
+          <ProjectRetentionForm />
+        </SectionCard>
 
-        {/* Right column */}
-        <div className="flex-1 space-y-6">
-          <SectionCard
-            icon={Key}
-            title="API Keys"
-            description="Manage keys for data ingestion"
-            staggerDelay={80}
-          >
-            <ApiKeySection />
-          </SectionCard>
-        </div>
+        {/* Danger Zone - order-4 (last) on mobile, left column on desktop */}
+        <SectionCard
+          icon={AlertTriangle}
+          title="Danger Zone"
+          variant="destructive"
+          staggerDelay={190}
+          className="order-4 lg:order-none"
+        >
+          <DeleteProjectSection />
+        </SectionCard>
       </div>
     </div>
   );
