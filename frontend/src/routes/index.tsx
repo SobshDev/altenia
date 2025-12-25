@@ -4,6 +4,11 @@ import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { AccountPage } from '@/features/settings/pages/AccountPage';
 import { OrganizationPage } from '@/features/settings/pages/OrganizationPage';
+import { ProjectLogsPage } from '@/features/projects/pages/ProjectLogsPage';
+import { ProjectMetricsPage } from '@/features/projects/pages/ProjectMetricsPage';
+import { ProjectTracesPage } from '@/features/projects/pages/ProjectTracesPage';
+import { ProjectAlertsPage } from '@/features/projects/pages/ProjectAlertsPage';
+import { ProjectSettingsPage } from '@/features/projects/pages/ProjectSettingsPage';
 import { AppLayout } from '@/shared/components/layout/AppLayout';
 import { UsernamePromptModal } from '@/shared/components/UsernamePromptModal';
 import { useAuthStore } from '@/stores/authStore';
@@ -102,6 +107,26 @@ export const router = createBrowserRouter([
       {
         path: 'settings/organization',
         element: <OrganizationPage />,
+      },
+      {
+        path: 'projects/:projectId/logs',
+        element: <ProjectLogsPage />,
+      },
+      {
+        path: 'projects/:projectId/metrics',
+        element: <ProjectMetricsPage />,
+      },
+      {
+        path: 'projects/:projectId/traces',
+        element: <ProjectTracesPage />,
+      },
+      {
+        path: 'projects/:projectId/alerts',
+        element: <ProjectAlertsPage />,
+      },
+      {
+        path: 'projects/:projectId/settings',
+        element: <ProjectSettingsPage />,
       },
     ],
   },

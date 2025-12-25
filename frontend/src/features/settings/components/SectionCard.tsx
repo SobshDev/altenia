@@ -6,6 +6,7 @@ interface SectionCardProps {
   description?: string;
   variant?: 'default' | 'destructive';
   staggerDelay?: number;
+  className?: string;
   children: React.ReactNode;
 }
 
@@ -15,6 +16,7 @@ export function SectionCard({
   description,
   variant = 'default',
   staggerDelay = 0,
+  className = '',
   children,
 }: SectionCardProps) {
   const isDestructive = variant === 'destructive';
@@ -25,7 +27,7 @@ export function SectionCard({
         isDestructive
           ? 'bg-destructive/5 border border-destructive/20 hover:border-destructive/30 transition-colors'
           : 'glass-card glow'
-      }`}
+      } ${className}`}
       style={{ '--stagger': `${staggerDelay}ms` } as React.CSSProperties}
     >
       <div className="flex items-start gap-4">

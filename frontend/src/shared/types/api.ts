@@ -94,3 +94,56 @@ export interface SendInviteRequest {
   email: string;
   role: 'admin' | 'member';
 }
+
+// Project types
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  organization_id: string;
+  retention_days: number;
+  metrics_retention_days: number;
+  traces_retention_days: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  description?: string;
+  retention_days?: number;
+  metrics_retention_days?: number;
+  traces_retention_days?: number;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  description?: string;
+  retention_days?: number;
+  metrics_retention_days?: number;
+  traces_retention_days?: number;
+}
+
+// API Key types
+export interface ApiKey {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  expires_at?: string;
+  is_active: boolean;
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  expires_in_days?: number;
+}
+
+export interface CreateApiKeyResponse {
+  id: string;
+  name: string;
+  key_prefix: string;
+  plain_key: string;
+  created_at: string;
+  expires_at?: string;
+}
